@@ -27,7 +27,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 // Margen (en px) respecto a las esquinas de la pantalla.
 const MARGEN_X: i32 = 24;
-const MARGEN_Y: i32 = 24;
+// 0 = pegado al fondo, para que el sprite quede por encima de la barra de tareas.
+const MARGEN_Y: i32 = 0;
 
 // Anchos de la ventana: normal y mientras duerme (la cama es ancha).
 const ANCHO_NORMAL: u32 = 280;
@@ -160,6 +161,7 @@ fn iniciar_hover_clickthrough(win: tauri::WebviewWindow) {
         use windows::Win32::UI::WindowsAndMessaging::GetCursorPos;
 
         let mut ignorando = false;
+        let mut tick: u32 = 0;
         // Empezamos dejando pasar los clicks.
         let _ = win.set_ignore_cursor_events(true);
 
@@ -167,6 +169,13 @@ fn iniciar_hover_clickthrough(win: tauri::WebviewWindow) {
             std::thread::sleep(std::time::Duration::from_millis(120));
             if !win.is_visible().unwrap_or(false) {
                 continue;
+            }
+
+            // Re-afirmar "siempre encima" cada ~2,4 s para quedar por encima de la
+            // barra de tareas (que también es una ventana topmost y si no, nos tapa).
+            tick = tick.wrapping_add(1);
+            if tick % 20 == 0 {
+                let _ = win.set_always_on_top(true);
             }
             let mut p = POINT::default();
             if unsafe { GetCursorPos(&mut p) }.is_err() {

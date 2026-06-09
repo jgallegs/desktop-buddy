@@ -49,10 +49,12 @@ pub fn iniciar_monitor(app: AppHandle, cfg: Settings) {
             // Para no repetir el mismo aviso (clave: ISSUE@updated).
             let mut vistos: HashSet<String> = HashSet::new();
             let mut primera_vuelta = true;
+            let mut error_avisado = false;
 
             loop {
                 match sondear(&cliente, &cfg, &base, mins).await {
                     Ok(issues) => {
+                        error_avisado = false;
                         for ev in &issues {
                             let clave = format!("{}@{}", ev.key, ev.updated);
                             if !vistos.insert(clave) {
@@ -71,7 +73,15 @@ pub fn iniciar_monitor(app: AppHandle, cfg: Settings) {
                         // Evitar que `vistos` crezca sin límite.
                         if vistos.len() > 500 { vistos.clear(); primera_vuelta = true; }
                     }
-                    Err(e) => eprintln!("[jira] error sondeando: {e}"),
+                    Err(e) => {
+                        eprintln!("[jira] error sondeando: {e}");
+                        // Mostrar el error una sola vez (hasta que vuelva a funcionar)
+                        // para poder diagnosticar sin tener consola.
+                        if !error_avisado {
+                            error_avisado = true;
+                            let _ = app.emit("mascota://jira", AvisoJira { texto: format!("⚠️ Jira: {e}") });
+                        }
+                    }
                 }
                 tokio::time::sleep(Duration::from_secs(intervalo)).await;
             }
@@ -110,11 +120,13 @@ async fn sondear(
     mins: u64,
 ) -> Result<Vec<IssueEv>, Box<dyn std::error::Error>> {
     let proyecto = cfg.jira_proyecto.trim();
-    let jql = if proyecto.is_empty() {
-        format!("assignee = currentUser() AND updated >= \"-{mins}m\" ORDER BY updated DESC")
+    // Incidencias asignadas a mí O que sigo (watch) — y, si hay proyecto, también las suyas.
+    let filtro = if proyecto.is_empty() {
+        "(assignee = currentUser() OR watcher = currentUser())".to_string()
     } else {
-        format!("(assignee = currentUser() OR project = {proyecto}) AND updated >= \"-{mins}m\" ORDER BY updated DESC")
+        format!("(assignee = currentUser() OR watcher = currentUser() OR project = {proyecto})")
     };
+    let jql = format!("{filtro} AND updated >= \"-{mins}m\" ORDER BY updated DESC");
 
     let body = serde_json::json!({
         "jql": jql,
@@ -122,13 +134,34 @@ async fn sondear(
         "maxResults": 20
     });
 
-    let resp: serde_json::Value = cliente
-        .post(format!("{base}/rest/api/3/search/jql"))
-        .basic_auth(&cfg.jira_email, Some(&cfg.jira_token))
-        .header("Accept", "application/json")
-        .json(&body)
-        .send().await?
-        .json().await?;
+    // Probar el endpoint nuevo y, si está retirado (404/410), caer al clásico.
+    // Cualquier otro error (401 auth, 400 JQL...) se propaga con su código para verlo.
+    let mut resp: Option<serde_json::Value> = None;
+    let mut ultimo_error = String::new();
+    for endpoint in ["/rest/api/3/search/jql", "/rest/api/3/search"] {
+        let r = cliente
+            .post(format!("{base}{endpoint}"))
+            .basic_auth(&cfg.jira_email, Some(&cfg.jira_token))
+            .header("Accept", "application/json")
+            .json(&body)
+            .send().await?;
+        let s = r.status();
+        if s.is_success() {
+            resp = Some(r.json().await?);
+            break;
+        }
+        let cuerpo = r.text().await.unwrap_or_default();
+        let corto: String = cuerpo.chars().take(140).collect();
+        ultimo_error = format!("HTTP {} en {endpoint} — {corto}", s.as_u16());
+        // 404/410 = ese endpoint no existe aquí: probamos el otro. Si no, paramos.
+        if s.as_u16() != 404 && s.as_u16() != 410 {
+            break;
+        }
+    }
+    let resp = match resp {
+        Some(v) => v,
+        None => return Err(ultimo_error.into()),
+    };
 
     let mut out = Vec::new();
     if let Some(arr) = resp.get("issues").and_then(|v| v.as_array()) {

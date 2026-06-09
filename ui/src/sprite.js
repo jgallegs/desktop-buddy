@@ -100,12 +100,24 @@ export class SpriteEngine {
 
   setSpeed(mult) { this.speed = mult; }
 
-  /** Ajusta el tamaño del lienzo (al ensanchar/estrechar la ventana al dormir). */
+  /** Ajusta el tamaño del lienzo (al ensanchar/estrechar la ventana al dormir).
+   *  Si el tamaño no cambia, no hace nada: cambiar canvas.width borra el lienzo, y
+   *  el WebView puede emitir eventos 'resize' espurios que causarían parpadeo. */
   ajustarLienzo(w, h) {
+    w = Math.round(w);
+    h = Math.round(h);
+    if (this.canvas.width === w && this.canvas.height === h) return;
     this.canvas.width = w;
     this.canvas.height = h;
     this.ctx.imageSmoothingEnabled = false; // cambiar width resetea el contexto
     this._dibujar();
+  }
+
+  /** Precarga todas las hojas para que cambiar de animación nunca deje un hueco en blanco. */
+  precargarTodo() {
+    for (const k of Object.keys(ANIMACIONES)) {
+      this._cargar(ANIMACIONES[k].sheet).catch(() => {});
+    }
   }
 
   arrancar() {

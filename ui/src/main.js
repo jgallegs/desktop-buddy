@@ -20,6 +20,7 @@ async function arrancar() {
   const bocadilloTexto = document.getElementById("bocadillo-texto");
 
   const sprite = new SpriteEngine(canvas);
+  sprite.precargarTodo(); // evita huecos en blanco al cambiar de animación
   const bocadillo = new Bocadillo(bocadilloEl, bocadilloTexto);
 
   // El lienzo ocupa el ancho de la ventana (que se ensancha al dormir).

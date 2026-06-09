@@ -214,9 +214,9 @@ client_id:
 
 ## Novedades de Jira Cloud
 
-Joaquincillo te avisa de novedades de Jira en su bocadillo: cambios en tus tareas,
-cambios de estado, comentarios y menciones (y, si configuras un proyecto, también sus
-novedades). Para activarlo:
+Joaquincillo te avisa de novedades de Jira en su bocadillo de las incidencias que tienes
+**asignadas o que sigues (watch)**: cambios de estado, comentarios y menciones (y, si
+configuras un proyecto, también sus novedades). Para activarlo:
 
 1. Crea un **token de API**: <https://id.atlassian.com/manage-profile/security/api-tokens>
    → *Create API token* → copia el token.

@@ -29,7 +29,7 @@ html, body {
   cursor: pointer;
   /* Pixel art: que no se vea borroso al escalar. */
   image-rendering: pixelated;
-  filter: drop-shadow(0 6px 8px rgba(0, 0, 0, 0.35));
+  /* (Sin filter drop-shadow: en ventana transparente provoca parpadeo al redibujar.) */
 }
 
 /* Bocadillo de diálogo. */
