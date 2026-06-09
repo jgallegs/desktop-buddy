@@ -8,6 +8,9 @@ import { fraseAleatoria } from "./speech.js";
 import { IDLE_KEYS } from "./sprite.js";
 
 // Prioridad (mayor = manda). Un estado de menor prioridad no interrumpe a uno mayor.
+// Jira tiene la MÁXIMA: interrumpe lo que haya, suelta su aviso y luego se reanuda
+// lo interrumpido (p. ej. una reunión vuelve a salir). Nada se pierde: lo que no
+// puede mostrarse ahora se encola y se reintenta al quedar libre.
 const PRIORIDAD = {
   idle: 0,
   dormir: 1,
@@ -15,8 +18,17 @@ const PRIORIDAD = {
   talking: 3,
   celebrar: 4,
   reunion: 5,
-  nervioso: 6, // reunión GO/NOGO: lo más importante
+  nervioso: 6, // reunión GO/NOGO
+  jira: 7,     // novedades de Jira: lo más importante, interrumpe y luego reanuda
 };
+
+// Duraciones (ms).
+const REUNION_MS = 60 * 1000; // cuánto se muestra el aviso de reunión
+const AVISO_MS = 6 * 1000;    // cuánto se muestra un aviso de Jira
+// Caducidad si un evento queda encolado (para no mostrar algo ya irrelevante).
+const REUNION_CADUCA_MS = 15 * 60 * 1000;
+const NERVIOSO_CADUCA_MS = 5 * 60 * 1000;
+const AVISO_CADUCA_MS = 90 * 1000;
 
 // Variación de idle: cada cuánto (ms) cambiar de hoja para no hacer siempre lo mismo.
 const IDLE_CAMBIO_MIN = 8000;
@@ -54,6 +66,10 @@ export class MaquinaEstados {
     this.celebradoEl = null;
     this._pendiente = null; // acción a ejecutar tras levantarse/calmarse
     this._nerviosoTimer = null;
+    this._reunionTimer = null;
+    this._avisoTimer = null;
+    this._cola = [];        // eventos importantes que esperan turno (no se pierden)
+    this._sostenida = null; // actividad en curso a reanudar si la interrumpen (reunión/nervios)
     this._aplicar("idle");
     this._programarCambioIdle();
   }
@@ -112,26 +128,58 @@ export class MaquinaEstados {
     if (this._durmiendo()) return this._despertar(() => this.reunion(datos));
     // Reunión GO/NOGO -> ponerse nervioso. El resto -> aviso normal.
     if (RE_GONOGO.test(datos.titulo || "")) return this._nervioso(datos);
-    this._mostrarReunion(datos);
+    // Si ya hay una reunión en pantalla, refrescarla en sitio (no encolar otra).
+    if (this.estado === "reunion") return this._pintarReunion(datos);
+    this._pedir("reunion", () => this._pintarReunion(datos), REUNION_CADUCA_MS);
+  }
+
+  _pintarReunion(datos) {
+    // Actividad sostenida: si algo la interrumpe (un Jira), se reanuda igual.
+    this.estado = "reunion";
+    this._sostenida = {
+      nombre: "reunion",
+      prio: PRIORIDAD.reunion,
+      redisplay: () => this._pintarReunion(datos),
+      caduca: 0,
+    };
+    this.sprite.play("talk");
+    this.sprite.setSpeed(1.2);
+    this.bocadillo.mostrar(`📅 "${datos.titulo}" en ${datos.minutos} min`, 0, true);
+    clearTimeout(this._reunionTimer);
+    this._reunionTimer = setTimeout(() => {
+      this._sostenida = null;
+      this.bocadillo.ocultar();
+      this._volverAFondo();
+    }, REUNION_MS);
   }
 
   /** Secuencia de nervios por reunión GO/NOGO: mira el reloj -> nervioso (bucle). */
-  _nervioso({ titulo, minutos }) {
-    const texto = `😬 GO/NOGO: "${titulo}" en ${minutos} min`;
+  _nervioso(datos) {
+    const texto = `😬 GO/NOGO: "${datos.titulo}" en ${datos.minutos} min`;
     // Si ya está nervioso, solo refresca el aviso y el temporizador (no reinicia la anim).
     if (this.estado === "nervioso") {
       this.bocadillo.mostrar(texto, 0);
       this._reprogramarNervioso();
       return;
     }
-    this._transicion("nervioso", () => {
-      this.sprite.setSpeed(1);
-      this.bocadillo.mostrar(texto, 0); // persistente hasta que se calme
-      this.sprite.play("reloj", { onComplete: () => {
-        if (this.estado === "nervioso") this.sprite.play("nervioso");
-      }});
-      this._reprogramarNervioso();
-    });
+    this._pedir("nervioso", () => this._pintarNervioso(datos), NERVIOSO_CADUCA_MS);
+  }
+
+  _pintarNervioso(datos) {
+    const texto = `😬 GO/NOGO: "${datos.titulo}" en ${datos.minutos} min`;
+    this.estado = "nervioso";
+    this._sostenida = {
+      nombre: "nervioso",
+      prio: PRIORIDAD.nervioso,
+      redisplay: () => this._pintarNervioso(datos),
+      caduca: 0,
+    };
+    this.sprite.setSpeed(1);
+    this.bocadillo.mostrar(texto, 0); // persistente hasta que se calme
+    this.sprite.play("reloj", { onComplete: () => {
+      if (this.estado === "nervioso") this.sprite.play("nervioso");
+    }});
+    this._reprogramarNervioso();
   }
 
   _reprogramarNervioso() {
@@ -151,6 +199,7 @@ export class MaquinaEstados {
       return;
     }
     clearTimeout(this._nerviosoTimer);
+    this._sostenida = null; // ya no hay que reanudar el nervios
     this.estado = "calmando";
     this._pendiente = despues;
     this.bocadillo.ocultar();
@@ -167,30 +216,74 @@ export class MaquinaEstados {
   /** Aviso de Jira (texto ya formateado por el backend). */
   jira(texto) {
     if (!texto) return;
-    if (this._durmiendo()) return this._despertar(() => this._mostrarAviso(texto));
+    if (this._durmiendo()) return this._despertar(() => this.jira(texto));
     this._mostrarAviso(texto);
   }
 
-  /** Aviso breve: habla y muestra el texto unos segundos, luego vuelve al idle. */
+  /** Pide mostrar un aviso de Jira (máxima prioridad: interrumpe lo que haya). */
   _mostrarAviso(texto) {
-    this._transicion("talking", () => {
-      this.sprite.play("talk");
-      this.bocadillo.mostrar(texto, 6000);
-      setTimeout(() => this._volverAFondo(), 6000);
-    });
+    this._pedir("jira", () => this._pintarAviso(texto), AVISO_CADUCA_MS);
   }
 
-  _mostrarReunion({ titulo, minutos }) {
-    this._transicion("reunion", () => {
-      this.sprite.play("talk"); // (comportamiento de eventos pendiente de rediseñar)
-      this.sprite.setSpeed(1.2);
-      const txt = `📅 "${titulo}" en ${minutos} min`;
-      this.bocadillo.mostrar(txt, 0, true);
-      setTimeout(() => {
-        this.bocadillo.ocultar();
-        this._volverAFondo();
-      }, 60000);
-    });
+  _pintarAviso(texto) {
+    this.estado = "jira";
+    this.sprite.play("talk");
+    this.bocadillo.mostrar(texto, AVISO_MS);
+    clearTimeout(this._avisoTimer);
+    // Al acabar, _volverAFondo reanuda lo interrumpido o muestra lo encolado.
+    this._avisoTimer = setTimeout(() => this._volverAFondo(), AVISO_MS);
+  }
+
+  // ---- Cola de eventos importantes (nada se pierde) ------------------------
+
+  /**
+   * Intenta mostrar un evento. Si hay algo de prioridad ESTRICTAMENTE mayor en
+   * pantalla, se encola y se reintenta cuando aquello acabe. Si este evento es
+   * más prioritario, interrumpe lo que haya; y si lo interrumpido era una
+   * actividad sostenida (una reunión), se reencola para reanudarla después.
+   */
+  _pedir(nombre, redisplay, caducaMs = 0) {
+    const prio = PRIORIDAD[nombre] ?? 0;
+    const prioActual = PRIORIDAD[this.estado] ?? 0;
+    if (prio > prioActual) {
+      clearTimeout(this._reunionTimer);
+      clearTimeout(this._nerviosoTimer);
+      clearTimeout(this._avisoTimer);
+      if (this._sostenida) this._encolar(this._sostenida); // reanudar luego
+      this._sostenida = null;
+      this.estado = nombre;
+      redisplay();
+    } else {
+      this._encolar({ nombre, prio, redisplay, caduca: caducaMs ? Date.now() + caducaMs : 0 });
+    }
+  }
+
+  _encolar(entrada) {
+    if (!entrada) return;
+    // Para reunión/nervios solo guardamos una entrada (refrescamos la existente).
+    const dup = this._cola.find((e) => e.nombre === entrada.nombre);
+    if (dup && (entrada.nombre === "reunion" || entrada.nombre === "nervioso")) {
+      dup.redisplay = entrada.redisplay;
+      return;
+    }
+    this._cola.push(entrada);
+    if (this._cola.length > 8) this._cola.shift();
+  }
+
+  /** Muestra el evento pendiente de mayor prioridad. Devuelve true si mostró algo. */
+  _siguiente() {
+    const ahora = Date.now();
+    this._cola = this._cola.filter((e) => !e.caduca || e.caduca > ahora);
+    if (this._cola.length === 0) return false;
+    let idx = 0;
+    for (let i = 1; i < this._cola.length; i++) {
+      if (this._cola[i].prio > this._cola[idx].prio) idx = i;
+    }
+    const e = this._cola.splice(idx, 1)[0];
+    this.estado = "idle"; // liberar para que el repintado se aplique
+    this._sostenida = null;
+    setTimeout(() => e.redisplay(), 200); // respiro para no pisar la animación
+    return true;
   }
 
   /** Tick periódico (lo llama main.js cada ~1 s): dormir, fin de jornada. */
@@ -287,12 +380,16 @@ export class MaquinaEstados {
   // ---- Interno -------------------------------------------------------------
 
   _transicion(nuevo, accion) {
-    if (PRIORIDAD[nuevo] < (PRIORIDAD[this.estado] ?? 0)) return;
+    if (PRIORIDAD[nuevo] < (PRIORIDAD[this.estado] ?? 0)) return false;
     this.estado = nuevo;
     if (accion) accion();
+    return true;
   }
 
   _volverAFondo() {
+    // ¿Hay un evento importante esperando (reunión interrumpida, otro Jira…)?
+    // Lo mostramos en vez de quedarnos en el fondo. Así nada se pierde.
+    if (this._siguiente()) return;
     const fondo = this.onFireActivo ? "on_fire" : "idle";
     this.estado = fondo;
     this.sprite.setSpeed(fondo === "on_fire" ? 1.6 : 1);
