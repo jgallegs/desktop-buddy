@@ -15,6 +15,7 @@ const PRIORIDAD = {
   talking: 3,
   celebrar: 4,
   reunion: 5,
+  nervioso: 6, // reunión GO/NOGO: lo más importante
 };
 
 // Variación de idle: cada cuánto (ms) cambiar de hoja para no hacer siempre lo mismo.
@@ -26,6 +27,13 @@ const MS_PARA_DORMIR = 10 * 60 * 1000; // 10 min
 
 // Hora (0-23) a la que celebra el fin de la jornada (null = desactivado).
 const HORA_FIN_JORNADA = 18;
+
+// Detecta reuniones GO/NOGO por el título (varía mucho): "[CEX] - GO/NOGO",
+// "[EVO] GO / NO GO MDA-6742", "GONOGO", "go/no-go"...
+const RE_GONOGO = /go[\s\/]*no[\s\/-]*go/i;
+
+// Cuánto se mantiene nervioso sin que se refresque el aviso (se renueva en cada sondeo).
+const NERVIOSO_MS = 2 * 60 * 1000; // 2 min
 
 export class MaquinaEstados {
   /**
@@ -44,7 +52,8 @@ export class MaquinaEstados {
     this.idleActual = IDLE_KEYS[0];
     this.idleTimer = null;
     this.celebradoEl = null;
-    this._pendiente = null; // acción a ejecutar tras levantarse
+    this._pendiente = null; // acción a ejecutar tras levantarse/calmarse
+    this._nerviosoTimer = null;
     this._aplicar("idle");
     this._programarCambioIdle();
   }
@@ -60,7 +69,13 @@ export class MaquinaEstados {
   click() {
     this.ultimaInteraccion = Date.now();
     if (this._durmiendo()) return this._despertar(() => this._hablarClick());
+    if (this._nervios()) return this._calmar(() => this._hablarClick());
     this._hablarClick();
+  }
+
+  /** ¿Está en la secuencia de nervios (GO/NOGO)? */
+  _nervios() {
+    return this.estado === "nervioso" || this.estado === "calmando";
   }
 
   _hablarClick() {
@@ -94,8 +109,59 @@ export class MaquinaEstados {
 
   /** Reunión próxima (payload de calendar.rs: { titulo, minutos }). */
   reunion(datos) {
-    if (this._durmiendo()) return this._despertar(() => this._mostrarReunion(datos));
+    if (this._durmiendo()) return this._despertar(() => this.reunion(datos));
+    // Reunión GO/NOGO -> ponerse nervioso. El resto -> aviso normal.
+    if (RE_GONOGO.test(datos.titulo || "")) return this._nervioso(datos);
     this._mostrarReunion(datos);
+  }
+
+  /** Secuencia de nervios por reunión GO/NOGO: mira el reloj -> nervioso (bucle). */
+  _nervioso({ titulo, minutos }) {
+    const texto = `😬 GO/NOGO: "${titulo}" en ${minutos} min`;
+    // Si ya está nervioso, solo refresca el aviso y el temporizador (no reinicia la anim).
+    if (this.estado === "nervioso") {
+      this.bocadillo.mostrar(texto, 0);
+      this._reprogramarNervioso();
+      return;
+    }
+    this._transicion("nervioso", () => {
+      this.sprite.setSpeed(1);
+      this.bocadillo.mostrar(texto, 0); // persistente hasta que se calme
+      this.sprite.play("reloj", { onComplete: () => {
+        if (this.estado === "nervioso") this.sprite.play("nervioso");
+      }});
+      this._reprogramarNervioso();
+    });
+  }
+
+  _reprogramarNervioso() {
+    clearTimeout(this._nerviosoTimer);
+    this._nerviosoTimer = setTimeout(() => {
+      if (this.estado === "nervioso") this._calmar();
+    }, NERVIOSO_MS);
+  }
+
+  /**
+   * Sale de los nervios reproduciendo "volver_normal" ENTERO y, solo al terminar,
+   * ejecuta la acción pendiente (o vuelve al idle). Así nunca hay cortes raros.
+   */
+  _calmar(despues = null) {
+    if (this.estado === "calmando") {
+      if (despues) this._pendiente = despues;
+      return;
+    }
+    clearTimeout(this._nerviosoTimer);
+    this.estado = "calmando";
+    this._pendiente = despues;
+    this.bocadillo.ocultar();
+    this.sprite.setSpeed(1);
+    this.sprite.play("volver_normal", { onComplete: () => {
+      this.estado = "idle";
+      const accion = this._pendiente;
+      this._pendiente = null;
+      if (accion) accion();
+      else this._volverAFondo();
+    }});
   }
 
   /** Aviso de Jira (texto ya formateado por el backend). */

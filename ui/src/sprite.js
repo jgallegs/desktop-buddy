@@ -32,6 +32,14 @@ export const ANIMACIONES = {
   tumbarse:  { sheet: "assets/joaquincillo-dormir-ciclo.png", cols: 8, rows: 8, frames: 64, desde: 0, hasta: 40, fps: 18, loop: false, modo: "tumbado", escala: 0.747, piso: 544, fallback: "idle" },
   dormir:    { sheet: "assets/joaquincillo-dormir-idle.png",  cols: 8, rows: 8, frames: 64, fps: 6,  loop: true,  modo: "tumbado", escala: 0.67,  piso: 381, fallback: "idle" },
   levantarse:{ sheet: "assets/joaquincillo-levantarse.png",   cols: 8, rows: 8, frames: 64, fps: 18, loop: false, modo: "tumbado", escala: 0.80,  piso: 475, fallback: "idle" },
+
+  // --- Reunión GO/NOGO (de pie, nervioso) ---
+  // reloj: mira el reloj (normal -> nervioso, una vez) -> pasa a "nervioso".
+  reloj:        { sheet: "assets/joaquincillo-reloj.png",         cols: 6, rows: 6, frames: 36, fps: 12, loop: false, cTop: 2,  cBot: 514, fallback: "talk" },
+  // nervioso: tembleque, en bucle.
+  nervioso:     { sheet: "assets/joaquincillo-nervioso.png",      cols: 6, rows: 6, frames: 36, fps: 10, loop: true,  cTop: 15, cBot: 546, fallback: "idle" },
+  // volver_normal: nervioso -> calmado (una vez) -> idle.
+  volver_normal:{ sheet: "assets/joaquincillo-volver-normal.png", cols: 6, rows: 6, frames: 36, fps: 12, loop: false, cTop: 3,  cBot: 516, fallback: "idle" },
 };
 
 // Altura objetivo del personaje (de pie) en el lienzo (px).

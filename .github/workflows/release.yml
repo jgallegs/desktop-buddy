@@ -43,11 +43,15 @@ jobs:
         shell: pwsh
         run: |
           if ($env:GITHUB_REF_TYPE -eq 'tag') {
-            $v = "${{ github.ref_name }}".TrimStart('v')
             $tag = "${{ github.ref_name }}"
+            $v = $tag -replace '^[vV]', ''        # quita la v inicial para Velopack
           } else {
-            $v = "${{ github.event.inputs.version }}"
+            $v = "${{ github.event.inputs.version }}" -replace '^[vV]', ''
             $tag = "v$v"
+          }
+          if ($v -notmatch '^\d+\.\d+\.\d+$') {
+            Write-Error "La versión '$v' no es SemVer de 3 partes (ej. 0.0.5). Pon solo numeros: X.Y.Z"
+            exit 1
           }
           "VERSION=$v"     | Out-File -FilePath $env:GITHUB_ENV -Append
           "RELEASE_TAG=$tag" | Out-File -FilePath $env:GITHUB_ENV -Append

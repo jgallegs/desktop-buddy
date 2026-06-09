@@ -51,6 +51,7 @@
     <button data-acc="fire-off">On fire OFF</button>
     <button data-acc="reunion">📅 Reunión en 5 min</button>
     <button data-acc="jira">🟦 Novedad de Jira</button>
+    <button data-acc="gonogo">😬 Reunión GO/NOGO</button>
     <button data-acc="celebrar">🎉 Celebrar</button>
     <button data-acc="dormir">😴 Dormir</button>
     <button data-acc="despertar">⏰ Despertar</button>
@@ -76,6 +77,9 @@ const ANIMS = {
   tumbarse:  { sheet:"ui/assets/joaquincillo-dormir-ciclo.png", cols:8, rows:8, frames:64, desde:0, hasta:40, fps:18, loop:false, modo:"tumbado", escala:0.747, piso:544 },
   dormir:    { sheet:"ui/assets/joaquincillo-dormir-idle.png",  cols:8, rows:8, frames:64, fps:6,  loop:true,  modo:"tumbado", escala:0.67, piso:381 },
   levantarse:{ sheet:"ui/assets/joaquincillo-levantarse.png",   cols:8, rows:8, frames:64, fps:18, loop:false, modo:"tumbado", escala:0.80, piso:475 },
+  reloj:        { sheet:"ui/assets/joaquincillo-reloj.png",         cols:6, rows:6, frames:36, fps:12, loop:false, cTop:2,  cBot:514 },
+  nervioso:     { sheet:"ui/assets/joaquincillo-nervioso.png",      cols:6, rows:6, frames:36, fps:10, loop:true,  cTop:15, cBot:546 },
+  volver_normal:{ sheet:"ui/assets/joaquincillo-volver-normal.png", cols:6, rows:6, frames:36, fps:12, loop:false, cTop:3,  cBot:516 },
 };
 const IDLE_KEYS = ["idle","idle2","idle3","idle4"];
 const ALTURA_PERSONAJE = 360;
@@ -165,11 +169,25 @@ function dormir(){
 function despertar(despues){
   play("levantarse", ()=>{ setAncho(ANCHO_NORMAL); if(despues) despues(); else volverIdle(); });
 }
-// Si está dormido, primero se levanta y LUEGO hace la acción (sin cortes bruscos).
-function hacer(fn){ if(anim.modo==="tumbado") despertar(fn); else fn(); }
+function gonogo(){
+  play("reloj", ()=>play("nervioso"));
+  mostrar('😬 GO/NOGO: "[CEX] - GO/NOGO" en 5 min', 0);
+}
+function calmar(despues){
+  boc.classList.add("oculto");
+  play("volver_normal", ()=>{ if(despues) despues(); else volverIdle(); });
+}
+const enNervios = ()=> anim===ANIMS.reloj || anim===ANIMS.nervioso;
+// Si está dormido o nervioso, primero hace la animación de salida y LUEGO la acción.
+function hacer(fn){
+  if(anim.modo==="tumbado") despertar(fn);
+  else if(enNervios()) calmar(fn);
+  else fn();
+}
 
 canvas.addEventListener("click",()=>{
   if(anim.modo==="tumbado") despertar(()=>hablar(rnd(FRASES.click)));
+  else if(enNervios()) calmar(()=>hablar(rnd(FRASES.click)));
   else hablar(rnd(FRASES.click));
 });
 document.querySelector(".controles").addEventListener("click",e=>{
@@ -180,6 +198,7 @@ document.querySelector(".controles").addEventListener("click",e=>{
   if(a==="reunion"){ hacer(()=>{ play("talk"); mostrar('📅 "Daily del equipo" en 5 min',6000,true); setTimeout(volverIdle,6000); }); }
   if(a==="jira"){ hacer(()=>{ play("talk"); mostrar(rnd(['🔄 ABC-123 → In Progress — Login con SSO','💬 Te han mencionado en ABC-98 — Revisar API','💬 Nuevo comentario en ABC-77 — Bug en el login']),6000); setTimeout(volverIdle,6000); }); }
   if(a==="celebrar"){ hacer(()=>{ play("celebrar"); mostrar('¡Buen trabajo hoy! 🎉',5000); setTimeout(volverIdle,5000); }); }
+  if(a==="gonogo"){ hacer(()=>gonogo()); }
   if(a==="dormir"){ if(anim.modo!=="tumbado") dormir(); }
   if(a==="despertar"){ if(anim.modo==="tumbado") despertar(); }
   if(a==="pausa") paused=!paused;

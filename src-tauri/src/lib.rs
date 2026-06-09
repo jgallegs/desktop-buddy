@@ -80,6 +80,15 @@ fn anclar_abajo_izquierda(win: &tauri::WebviewWindow) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // FIX del parpadeo/desaparición: Chromium (WebView2) tiene la función
+    // "CalculateNativeWinOcclusion" que en ventanas transparentes y always-on-top
+    // cree por error que están tapadas y DEJA DE PINTARLAS. La desactivamos para que
+    // Joaquincillo no desaparezca. Debe hacerse ANTES de crear el WebView.
+    std::env::set_var(
+        "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS",
+        "--disable-features=CalculateNativeWinOcclusion",
+    );
+
     tauri::Builder::default()
         .setup(|app| {
             let win = app
