@@ -2,9 +2,10 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Permisos de la ventana de la mascota. La mayoría de acciones (mover, esconder, click-through) se hacen desde Rust y no necesitan permiso; el frontend solo escucha eventos.",
-  "windows": ["mascota"],
+  "windows": ["mascota", "ajustes"],
   "permissions": [
     "core:default",
-    "core:event:default"
+    "core:event:default",
+    "core:window:allow-close"
   ]
 }

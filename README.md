@@ -100,7 +100,17 @@ Si lo dejas vacío, no busca actualizaciones. Solo funciona en la app **instalad
 ## Cómo interactuar
 
 - **Click en el sprite** → suelta una frase.
-- **Icono de bandeja** (junto al reloj) → Mostrar/esconder, Pausar, Salir.
+- **Icono de bandeja** (junto al reloj) → Mostrar/esconder, **Ajustes…**, Buscar
+  actualizaciones, Pausar, Salir.
+
+## Panel de ajustes
+
+Clic derecho en la bandeja → **Ajustes…** abre una ventana con formulario para meter las
+keys sin tocar `config.json`: sitio/email/token de Jira, proyecto e intervalo, client_id
+y tenant de Azure, umbral de "on fire", antelación de avisos y repo de actualizaciones.
+El **token de Jira se guarda cifrado** en el llavero de Windows (el campo aparece vacío
+aunque ya haya uno guardado; déjalo en blanco para no cambiarlo). Los cambios se aplican
+al reiniciar la app.
 - Los clicks **fuera** del sprite atraviesan la ventana: puedes seguir trabajando con lo
   que haya debajo de la esquina.
 

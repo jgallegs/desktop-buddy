@@ -62,7 +62,7 @@ pub fn comprobar_ahora(app: AppHandle, cfg: Settings) {
                 let _ = app.emit("mascota://update", ()); // "me actualizo y vuelvo"
                 um.download_updates(&updates, None)?;
                 std::thread::sleep(Duration::from_secs(5)); // que se vea el aviso
-                um.apply_updates_and_restart(&updates)?;    // instala y reinicia
+                um.apply_updates_and_restart(&*updates)?;   // instala y reinicia
                 Ok(true)
             } else {
                 Ok(false)

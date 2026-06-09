@@ -106,6 +106,16 @@ pub fn cargar(config_dir: &Path) -> Settings {
     s
 }
 
+/// Escribe los ajustes en config.json SIN el token (que vive en el llavero).
+pub fn escribir(config_dir: &Path, s: &Settings) -> std::io::Result<()> {
+    let _ = std::fs::create_dir_all(config_dir);
+    let mut disco = s.clone();
+    disco.jira_token = String::new();
+    let txt = serde_json::to_string_pretty(&disco)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+    std::fs::write(config_dir.join("config.json"), txt)
+}
+
 /// Mueve los secretos que pudieran estar en texto plano en config.json al llavero
 /// (Administrador de credenciales de Windows) y los borra del archivo. Después deja
 /// en memoria el valor efectivo leído del llavero, para que el resto del código lo use

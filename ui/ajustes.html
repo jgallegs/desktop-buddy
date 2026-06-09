@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Ajustes de Joaquincillo</title>
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    margin: 0; padding: 20px 22px;
+    font-family: "Segoe UI", system-ui, sans-serif;
+    background: #f4f5f7; color: #1d1d1f;
+    font-size: 14px;
+  }
+  h1 { font-size: 17px; margin: 0 0 4px; }
+  p.sub { margin: 0 0 18px; color: #666; font-size: 12.5px; }
+  fieldset { border: 1px solid #dcdee3; border-radius: 10px; margin: 0 0 16px; padding: 12px 14px 14px; }
+  legend { font-weight: 600; padding: 0 6px; color: #3a3d4a; }
+  label { display: block; margin: 10px 0 4px; font-size: 12.5px; color: #444; }
+  input {
+    width: 100%; box-sizing: border-box; padding: 8px 10px;
+    border: 1px solid #cfd2d8; border-radius: 7px; font-size: 13px; background: #fff; color: #1d1d1f;
+  }
+  input:focus { outline: 2px solid #4c8bf5; border-color: #4c8bf5; }
+  .hint { font-size: 11.5px; color: #8a8d94; margin-top: 3px; }
+  .fila { display: flex; gap: 10px; }
+  .fila > div { flex: 1; }
+  .acciones { display: flex; gap: 10px; justify-content: flex-end; margin-top: 6px; }
+  button {
+    padding: 9px 16px; border-radius: 8px; border: 1px solid transparent;
+    font-size: 13px; cursor: pointer;
+  }
+  button.primario { background: #2f6fed; color: #fff; }
+  button.primario:hover { background: #2a63d4; }
+  button.secundario { background: #e9eaee; color: #1d1d1f; }
+  #ok { color: #1a7f37; font-size: 12.5px; margin-right: auto; align-self: center; opacity: 0; transition: opacity .2s; }
+  #ok.ver { opacity: 1; }
+</style>
+</head>
+<body>
+  <h1>Ajustes de Joaquincillo</h1>
+  <p class="sub">Los cambios se aplican al reiniciar la app. Los tokens se guardan cifrados.</p>
+
+  <form id="form">
+    <fieldset>
+      <legend>Jira</legend>
+      <label>Sitio (sin https://)</label>
+      <input id="jira_site" placeholder="cexpress.atlassian.net" />
+      <label>Email de Atlassian</label>
+      <input id="jira_email" placeholder="tu.email@nttdata.com" />
+      <label>Token de API</label>
+      <input id="jira_token" type="password" placeholder="(déjalo vacío para no cambiarlo)" />
+      <div class="hint">Crea uno en id.atlassian.com → Seguridad → Tokens de API. Se guarda cifrado.</div>
+      <div class="fila">
+        <div>
+          <label>Proyecto a seguir (opcional)</label>
+          <input id="jira_proyecto" placeholder="ABC" />
+        </div>
+        <div>
+          <label>Cada cuántos segundos</label>
+          <input id="jira_intervalo_s" type="number" min="20" value="60" />
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Calendario (Microsoft / Teams)</legend>
+      <label>Application (client) ID de Azure</label>
+      <input id="azure_client_id" placeholder="(vacío = calendario simulado)" />
+      <label>Tenant</label>
+      <input id="azure_tenant" placeholder="common" />
+      <label>Avisar de reunión con (minutos) de antelación</label>
+      <input id="aviso_reunion_min" type="number" min="1" value="5" />
+    </fieldset>
+
+    <fieldset>
+      <legend>Otros</legend>
+      <label>Pulsaciones/min para "on fire"</label>
+      <input id="on_fire_apm" type="number" min="50" value="280" />
+      <label>Repo de actualizaciones (GitHub)</label>
+      <input id="github_repo" placeholder="https://github.com/jgallegs/desktop-buddy" />
+    </fieldset>
+
+    <div class="acciones">
+      <span id="ok">✓ Guardado</span>
+      <button type="button" class="secundario" id="cancelar">Cerrar</button>
+      <button type="submit" class="primario">Guardar</button>
+    </div>
+  </form>
+
+<script type="module" src="ajustes.js"></script>
+</body>
+</html>

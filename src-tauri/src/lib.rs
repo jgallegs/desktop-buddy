@@ -16,10 +16,11 @@ mod secrets;
 mod settings;
 mod updater;
 
+use serde::{Deserialize, Serialize};
 use tauri::{
     menu::{Menu, MenuItem},
     tray::TrayIconBuilder,
-    Manager, WindowEvent,
+    Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent,
 };
 
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -65,11 +66,12 @@ pub fn run() {
             settings::migrar_secretos(&config_dir, &mut cfg);
 
             // --- Icono de bandeja con menú ---
+            let ajustes = MenuItem::with_id(app, "ajustes", "Ajustes…", true, None::<&str>)?;
             let actualizar = MenuItem::with_id(app, "actualizar", "Buscar actualizaciones", true, None::<&str>)?;
             let pausar = MenuItem::with_id(app, "pausar", "Pausar / reanudar", true, None::<&str>)?;
             let esconder = MenuItem::with_id(app, "esconder", "Mostrar / esconder", true, None::<&str>)?;
             let salir = MenuItem::with_id(app, "salir", "Salir", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&esconder, &actualizar, &pausar, &salir])?;
+            let menu = Menu::with_items(app, &[&esconder, &ajustes, &actualizar, &pausar, &salir])?;
 
             let cfg_tray = cfg.clone(); // para el botón "Buscar actualizaciones"
             TrayIconBuilder::new()
@@ -92,6 +94,7 @@ pub fn run() {
                         // Comprobación bajo demanda: si hay update, descarga y reinicia.
                         updater::comprobar_ahora(app.clone(), cfg_tray.clone());
                     }
+                    "ajustes" => abrir_ajustes(app),
                     _ => {}
                 })
                 .build(app)?;
@@ -120,12 +123,17 @@ pub fn run() {
             comando_esconder,
             comando_set_clickthrough,
             comando_set_dormido,
+            cargar_ajustes,
+            guardar_ajustes,
         ])
         .on_window_event(|window, event| {
-            // Al cerrar, solo escondemos (la app sigue viva en la bandeja).
+            // La mascota no se cierra: se esconde (la app sigue viva en la bandeja).
+            // Las demás ventanas (ajustes) se cierran con normalidad.
             if let WindowEvent::CloseRequested { api, .. } = event {
-                api.prevent_close();
-                let _ = window.hide();
+                if window.label() == "mascota" {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
             }
         })
         .run(tauri::generate_context!())
@@ -196,6 +204,98 @@ fn comando_esconder(app: tauri::AppHandle) {
     if let Some(w) = app.get_webview_window("mascota") {
         let _ = w.hide();
     }
+}
+
+/// Abre (o trae al frente) la ventana de ajustes.
+fn abrir_ajustes(app: &tauri::AppHandle) {
+    if let Some(w) = app.get_webview_window("ajustes") {
+        let _ = w.show();
+        let _ = w.set_focus();
+        return;
+    }
+    let _ = WebviewWindowBuilder::new(app, "ajustes", WebviewUrl::App("ajustes.html".into()))
+        .title("Ajustes de Joaquincillo")
+        .inner_size(470.0, 600.0)
+        .resizable(true)
+        .build();
+}
+
+// --- Panel de ajustes (ventana "ajustes") -------------------------------------
+
+/// Lo que ve el formulario. El token NO se devuelve; solo si existe o no.
+#[derive(Serialize)]
+struct AjustesVista {
+    jira_site: String,
+    jira_email: String,
+    jira_token_set: bool,
+    jira_proyecto: String,
+    jira_intervalo_s: u64,
+    azure_client_id: String,
+    azure_tenant: String,
+    on_fire_apm: u64,
+    aviso_reunion_min: i64,
+    github_repo: String,
+}
+
+/// Lo que envía el formulario al guardar.
+#[derive(Deserialize)]
+struct AjustesEntrada {
+    jira_site: String,
+    jira_email: String,
+    jira_token: String, // vacío = no cambiar
+    jira_proyecto: String,
+    jira_intervalo_s: u64,
+    azure_client_id: String,
+    azure_tenant: String,
+    on_fire_apm: u64,
+    aviso_reunion_min: i64,
+    github_repo: String,
+}
+
+#[tauri::command]
+fn cargar_ajustes(app: tauri::AppHandle) -> AjustesVista {
+    let dir = app.path().app_config_dir().unwrap_or_else(|_| ".".into());
+    let s = settings::cargar(&dir);
+    AjustesVista {
+        jira_site: s.jira_site,
+        jira_email: s.jira_email,
+        jira_token_set: secrets::obtener("jira_token").map(|t| !t.is_empty()).unwrap_or(false),
+        jira_proyecto: s.jira_proyecto,
+        jira_intervalo_s: s.jira_intervalo_s,
+        azure_client_id: s.azure_client_id,
+        azure_tenant: s.azure_tenant,
+        on_fire_apm: s.on_fire_apm,
+        aviso_reunion_min: s.aviso_reunion_min,
+        github_repo: s.github_repo,
+    }
+}
+
+#[tauri::command]
+fn guardar_ajustes(app: tauri::AppHandle, datos: AjustesEntrada) -> Result<(), String> {
+    let dir = app.path().app_config_dir().map_err(|e| e.to_string())?;
+    let mut s = settings::cargar(&dir);
+    s.jira_site = datos.jira_site;
+    s.jira_email = datos.jira_email;
+    s.jira_proyecto = datos.jira_proyecto;
+    s.jira_intervalo_s = datos.jira_intervalo_s;
+    s.azure_client_id = datos.azure_client_id;
+    s.azure_tenant = datos.azure_tenant;
+    s.on_fire_apm = datos.on_fire_apm;
+    s.aviso_reunion_min = datos.aviso_reunion_min;
+    s.github_repo = datos.github_repo;
+
+    // Token: solo si el usuario escribió uno nuevo. Va al llavero cifrado.
+    let token_nuevo = datos.jira_token.trim();
+    if !token_nuevo.is_empty() {
+        secrets::guardar("jira_token", token_nuevo).map_err(|e| e.to_string())?;
+    }
+
+    settings::escribir(&dir, &s).map_err(|e| e.to_string())?;
+
+    if let Some(w) = app.get_webview_window("ajustes") {
+        let _ = w.close();
+    }
+    Ok(())
 }
 
 /// Activa/desactiva el "click-through": cuando está activo, los clicks atraviesan
