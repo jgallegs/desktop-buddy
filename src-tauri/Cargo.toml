@@ -18,8 +18,11 @@ tauri = { version = "2", features = ["tray-icon"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
-# Sondeo del calendario (Microsoft Graph) — fase 1
-reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
+# Sondeo de Jira/Graph. Usamos el TLS nativo del sistema (SChannel en Windows) en
+# vez de rustls: así confía en el almacén de certificados de Windows, que incluye la
+# CA del proxy corporativo (inspección SSL). Con rustls la conexión se caía en redes
+# de empresa ("error sending request"). default-tls = native-tls.
+reqwest = { version = "0.12", features = ["json"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "net"] }
 chrono = { version = "0.4", features = ["serde"] }
 

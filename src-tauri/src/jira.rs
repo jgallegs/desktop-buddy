@@ -42,6 +42,19 @@ fn log_jira(app: &AppHandle, linea: &str) {
     }
 }
 
+/// Aplana la cadena de causas de un error para ver el motivo real
+/// (p. ej. certificado TLS desconocido, proxy, DNS, timeout…).
+fn detalle_error(e: &dyn std::error::Error) -> String {
+    let mut s = e.to_string();
+    let mut fuente = e.source();
+    while let Some(f) = fuente {
+        s.push_str(" → ");
+        s.push_str(&f.to_string());
+        fuente = f.source();
+    }
+    s
+}
+
 pub fn iniciar_monitor(app: AppHandle, cfg: Settings) {
     if !cfg.jira_configurado() {
         // En vez de callarnos (lo que parece "no funciona"), decimos qué falta.
@@ -85,7 +98,7 @@ pub fn iniciar_monitor(app: AppHandle, cfg: Settings) {
             // Mi accountId (para detectar menciones y excluir mis propios comentarios).
             let mi_id = match mi_account_id(&cliente, &cfg, &base).await {
                 Ok(id) => { log_jira(&app, &format!("myself OK (accountId {} chars)", id.len())); id }
-                Err(e) => { eprintln!("[jira] no se pudo identificar al usuario: {e}"); log_jira(&app, &format!("myself ERROR: {e}")); String::new() }
+                Err(e) => { eprintln!("[jira] no se pudo identificar al usuario: {e}"); log_jira(&app, &format!("myself ERROR: {}", detalle_error(e.as_ref()))); String::new() }
             };
 
             // Para no repetir el mismo aviso (clave: ISSUE@updated).
@@ -126,7 +139,7 @@ pub fn iniciar_monitor(app: AppHandle, cfg: Settings) {
                     }
                     Err(e) => {
                         eprintln!("[jira] error sondeando: {e}");
-                        log_jira(&app, &format!("ERROR sondeando: {e}"));
+                        log_jira(&app, &format!("ERROR sondeando: {}", detalle_error(e.as_ref())));
                         // Mostrar el error una sola vez (hasta que vuelva a funcionar)
                         // para poder diagnosticar sin tener consola.
                         if !error_avisado {
