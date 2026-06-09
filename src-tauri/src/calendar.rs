@@ -12,7 +12,7 @@ use crate::secrets;
 use crate::settings::Settings;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 
 // Clave del token de Microsoft en el llavero (Administrador de credenciales).
 const CLAVE_TOKEN: &str = "ms_token";
@@ -51,14 +51,44 @@ pub fn iniciar_monitor(app: AppHandle, cfg: Settings) {
             .expect("no se pudo crear el runtime de tokio");
 
         rt.block_on(async move {
-            // --- Modo simulación: sin client_id no hay Graph ---
+            // --- Sin Azure: leer el calendario LOCAL de Windows (la cuenta de trabajo
+            //     añadida en Windows → Cuentas). Funciona con Outlook cerrado. Si el
+            //     sistema no nos deja, caemos a la simulación. ---
             if !cfg.calendario_configurado() {
-                tokio::time::sleep(Duration::from_secs(20)).await;
-                let _ = app.emit(
-                    "mascota://reunion",
-                    Reunion { titulo: "Daily del equipo".into(), minutos: cfg.aviso_reunion_min },
-                );
-                return;
+                // WinRT necesita un apartamento COM (MTA) en este hilo.
+                #[cfg(windows)]
+                let _mta = unsafe { windows::Win32::System::Com::CoIncrementMTAUsage() };
+
+                let mut win_ok = false;
+                loop {
+                    match proxima_reunion_windows() {
+                        Ok(op) => {
+                            if !win_ok {
+                                win_ok = true;
+                                log_cal(&app, "Calendario de Windows OK — leyendo tus reuniones");
+                            }
+                            if let Some(r) = op {
+                                if r.minutos <= cfg.aviso_reunion_min && r.minutos >= 0 {
+                                    let _ = app.emit("mascota://reunion", r);
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            log_cal(&app, &format!("Windows ERROR: {e}"));
+                            // Si ni la primera lectura funcionó, usamos la simulación.
+                            if !win_ok {
+                                log_cal(&app, "Sin acceso al calendario de Windows -> simulación");
+                                tokio::time::sleep(Duration::from_secs(20)).await;
+                                let _ = app.emit(
+                                    "mascota://reunion",
+                                    Reunion { titulo: "Daily del equipo".into(), minutos: cfg.aviso_reunion_min },
+                                );
+                                return;
+                            }
+                        }
+                    }
+                    tokio::time::sleep(Duration::from_secs(INTERVALO_SONDEO_S)).await;
+                }
             }
 
             let cliente = reqwest::Client::new();
@@ -268,4 +298,85 @@ async fn proxima_reunion(
         }
     }
     Ok(None)
+}
+
+// ======================= Calendario local de Windows ========================
+//
+// Lee el almacén de citas de Windows (WinRT AppointmentStore). Si la cuenta de
+// trabajo está añadida en Windows (Configuración → Cuentas → Acceso a trabajo o
+// escuela) con sincronización de calendario, esto funciona con Outlook CERRADO y
+// sin registrar nada en Azure. Devuelve la reunión más próxima en la siguiente hora.
+//
+// Nota: en apps de escritorio sin empaquetar, el SO puede denegar el acceso; en ese
+// caso devolvemos Err y el monitor cae a la simulación.
+
+// Ticks de 100 ns entre 1601-01-01 (época de WinRT/FILETIME) y 1970-01-01 (Unix).
+#[cfg(windows)]
+const EPOCH_DIFF_SECS: i64 = 11_644_473_600;
+
+#[cfg(windows)]
+fn proxima_reunion_windows() -> Result<Option<Reunion>, String> {
+    use windows::ApplicationModel::Appointments::{AppointmentManager, AppointmentStoreAccessType};
+    use windows::Foundation::{DateTime as WinDateTime, TimeSpan};
+
+    // Abrir el almacén de todos los calendarios en solo lectura.
+    let store = AppointmentManager::RequestStoreAsync(AppointmentStoreAccessType::AllCalendarsReadOnly)
+        .map_err(|e| format!("RequestStoreAsync: {e}"))?
+        .get()
+        .map_err(|e| format!("abrir almacén: {e}"))?;
+
+    let ahora = chrono::Utc::now();
+    let inicio = WinDateTime { UniversalTime: (ahora.timestamp() + EPOCH_DIFF_SECS) * 10_000_000 };
+    let duracion = TimeSpan { Duration: 60 * 60 * 10_000_000 }; // 1 hora en ticks de 100 ns
+
+    let citas = store
+        .FindAppointmentsAsync(inicio, duracion)
+        .map_err(|e| format!("FindAppointmentsAsync: {e}"))?
+        .get()
+        .map_err(|e| format!("buscar citas: {e}"))?;
+
+    let mut mejor: Option<(i64, String)> = None;
+    for cita in citas {
+        if cita.AllDay().unwrap_or(false) {
+            continue; // los eventos de día completo no son avisos de reunión
+        }
+        let start = match cita.StartTime() {
+            Ok(s) => s,
+            Err(_) => continue,
+        };
+        let secs = start.UniversalTime / 10_000_000 - EPOCH_DIFF_SECS;
+        let minutos = (secs - ahora.timestamp()) / 60;
+        if minutos < 0 {
+            continue;
+        }
+        let titulo = cita
+            .Subject()
+            .map(|s| s.to_string())
+            .unwrap_or_default();
+        let titulo = if titulo.trim().is_empty() { "Reunión".to_string() } else { titulo };
+        if mejor.as_ref().map(|(m, _)| minutos < *m).unwrap_or(true) {
+            mejor = Some((minutos, titulo));
+        }
+    }
+
+    Ok(mejor.map(|(minutos, titulo)| Reunion { titulo, minutos }))
+}
+
+#[cfg(not(windows))]
+fn proxima_reunion_windows() -> Result<Option<Reunion>, String> {
+    Err("el calendario de Windows solo está disponible en Windows".into())
+}
+
+/// Apunta el estado del calendario en %APPDATA%\com.equipo.joaquincillo\calendar.log
+/// para diagnosticar sin consola.
+fn log_cal(app: &AppHandle, linea: &str) {
+    if let Ok(dir) = app.path().app_config_dir() {
+        let _ = std::fs::create_dir_all(&dir);
+        let ruta = dir.join("calendar.log");
+        let ts = chrono::Local::now().format("%Y-%m-%d %H:%M:%S");
+        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&ruta) {
+            use std::io::Write;
+            let _ = writeln!(f, "[{ts}] {linea}");
+        }
+    }
 }

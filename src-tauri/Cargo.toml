@@ -33,10 +33,15 @@ velopack = "1.2"
 keyring = { version = "3", features = ["windows-native"] }
 
 [target.'cfg(windows)'.dependencies]
-# API de Windows para el hook de teclado (detección de actividad) y posicionado.
+# API de Windows para el hook de teclado (detección de actividad) y posicionado,
+# y WinRT para leer el calendario local (AppointmentStore) sin Azure ni Outlook.
 windows = { version = "0.58", features = [
   "Win32_Foundation",
   "Win32_UI_WindowsAndMessaging",
+  "Win32_System_Com",
+  "Foundation",
+  "Foundation_Collections",
+  "ApplicationModel_Appointments",
 ] }
 
 [profile.release]
