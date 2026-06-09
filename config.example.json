@@ -1,0 +1,11 @@
+{
+  "azure_client_id": "",
+  "azure_tenant": "common",
+  "on_fire_apm": 280,
+  "aviso_reunion_min": 5,
+  "jira_site": "cexpress.atlassian.net",
+  "jira_email": "tu.email@nttdata.com",
+  "jira_token": "",
+  "jira_proyecto": "",
+  "jira_intervalo_s": 60
+}

@@ -1,0 +1,19 @@
+# Dependencias y artefactos de compilación
+node_modules/
+src-tauri/target/
+dist/
+
+# Datos locales y SECRETOS — nunca subir tokens
+config.json
+ms_token.json
+
+# Originales sin procesar de los sprites (las versiones que usa la app están en assets/)
+/*.zip
+/sprite-max-px-*
+/A-complete-view-*.png
+/celebrando.png
+/levantandose.png
+
+# Sistema operativo
+.DS_Store
+Thumbs.db

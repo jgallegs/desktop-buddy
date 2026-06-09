@@ -1,0 +1,73 @@
+/* La ventana es transparente: nada de fondo en html/body. */
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  overflow: hidden;
+  /* El texto no se puede seleccionar (es una mascota, no un documento). */
+  user-select: none;
+  -webkit-user-select: none;
+  font-family: "Segoe UI", system-ui, sans-serif;
+}
+
+/* La escena ocupa toda la ventana; el sprite se ancla abajo. */
+#escena {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+/* El lienzo donde se dibuja el sprite. */
+#lienzo {
+  display: block;
+  /* Solo el sprite captura el ratón; lo gestiona main.js con click-through. */
+  cursor: pointer;
+  /* Pixel art: que no se vea borroso al escalar. */
+  image-rendering: pixelated;
+  filter: drop-shadow(0 6px 8px rgba(0, 0, 0, 0.35));
+}
+
+/* Bocadillo de diálogo. */
+#bocadillo {
+  max-width: 230px;
+  margin-bottom: 6px;
+  padding: 9px 13px;
+  background: #ffffff;
+  color: #1d1d1f;
+  font-size: 13px;
+  line-height: 1.35;
+  border-radius: 14px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+  position: relative;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+/* Piquito del bocadillo apuntando al sprite. */
+#bocadillo::after {
+  content: "";
+  position: absolute;
+  bottom: -7px;
+  left: 38px;
+  border-width: 8px 8px 0 8px;
+  border-style: solid;
+  border-color: #ffffff transparent transparent transparent;
+}
+
+/* Variante de aviso (reunión): borde y acento llamativos. */
+#bocadillo.aviso {
+  background: #fff4e5;
+  border: 1px solid #ff9f0a;
+}
+#bocadillo.aviso::after { border-top-color: #fff4e5; }
+
+/* Estado oculto del bocadillo (animado). */
+#bocadillo.oculto {
+  opacity: 0;
+  transform: translateY(6px);
+  pointer-events: none;
+}

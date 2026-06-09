@@ -1,0 +1,38 @@
+[package]
+name = "joaquincillo"
+version = "0.1.0"
+description = "Mascota virtual de escritorio"
+authors = ["Equipo Joaquincillo"]
+edition = "2021"
+rust-version = "1.77"
+
+[lib]
+name = "joaquincillo_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Sondeo del calendario (Microsoft Graph) — fase 1
+reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "net"] }
+chrono = { version = "0.4", features = ["serde"] }
+
+[target.'cfg(windows)'.dependencies]
+# API de Windows para el hook de teclado (detección de actividad) y posicionado.
+windows = { version = "0.58", features = [
+  "Win32_Foundation",
+  "Win32_UI_WindowsAndMessaging",
+] }
+
+[profile.release]
+panic = "abort"     # binario más pequeño
+codegen-units = 1
+lto = true
+opt-level = "s"     # optimizar para tamaño
+strip = true

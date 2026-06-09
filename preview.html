@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<title>Joaquincillo — preview</title>
+<style>
+  body {
+    margin: 0; min-height: 100vh; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 18px;
+    background: #11131a; color: #e8e8ea;
+    font-family: "Segoe UI", system-ui, sans-serif;
+  }
+  .nota { font-size: 13px; opacity: .7; max-width: 420px; text-align: center; }
+  #escena {
+    position: relative; width: 380px; height: 440px;
+    display: flex; flex-direction: column; justify-content: flex-end; align-items: center;
+  }
+  #lienzo { image-rendering: pixelated; filter: drop-shadow(0 6px 8px rgba(0,0,0,.5)); cursor: pointer; }
+  #bocadillo {
+    max-width: 230px; margin-bottom: 6px; padding: 9px 13px; background: #fff; color: #1d1d1f;
+    font-size: 13px; line-height: 1.35; border-radius: 14px; position: relative;
+    box-shadow: 0 4px 14px rgba(0,0,0,.4); transition: opacity .25s, transform .25s;
+  }
+  #bocadillo::after {
+    content: ""; position: absolute; bottom: -7px; left: 38px;
+    border-width: 8px 8px 0 8px; border-style: solid; border-color: #fff transparent transparent;
+  }
+  #bocadillo.aviso { background: #fff4e5; border: 1px solid #ff9f0a; }
+  #bocadillo.aviso::after { border-top-color: #fff4e5; }
+  #bocadillo.oculto { opacity: 0; transform: translateY(6px); pointer-events: none; }
+  .controles { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+  button {
+    background: #2a2d3a; color: #e8e8ea; border: 1px solid #3a3d4a; border-radius: 8px;
+    padding: 8px 12px; font-size: 13px; cursor: pointer;
+  }
+  button:hover { background: #353948; }
+</style>
+</head>
+<body>
+  <div class="nota">Vista de prueba de la mascota. Pulsa los botones para simular los
+    eventos que en la app real disparan el teclado y el calendario. Haz click en el sprite para que hable.</div>
+
+  <div id="escena">
+    <div id="bocadillo" class="oculto"><span id="bocadillo-texto"></span></div>
+    <canvas id="lienzo" width="280" height="380"></canvas>
+  </div>
+
+  <div class="controles">
+    <button data-acc="click">Click / hablar</button>
+    <button data-acc="fire-on">🔥 On fire ON</button>
+    <button data-acc="fire-off">On fire OFF</button>
+    <button data-acc="reunion">📅 Reunión en 5 min</button>
+    <button data-acc="jira">🟦 Novedad de Jira</button>
+    <button data-acc="celebrar">🎉 Celebrar</button>
+    <button data-acc="dormir">😴 Dormir</button>
+    <button data-acc="despertar">⏰ Despertar</button>
+    <button data-acc="pausa">⏸ Pausa</button>
+  </div>
+
+<script>
+// --- Versión autocontenida (sin módulos) para abrir con doble click ---
+const FRASES = {
+  click: ["¿Todo bien por ahí?","Recuerda: el café también es trabajar.","Vas estupendamente, sigue así.","¿Una pausita de 30 segundos? Yo te cubro."],
+  on_fire: ["¡Estás imparable! 🔥","Menudo ritmo llevas hoy.","Así da gusto. No te quemes igualmente."],
+};
+const rnd = a => a[Math.floor(Math.random()*a.length)];
+
+// Catálogo (igual que src/sprite.js).
+const ANIMS = {
+  idle:  { sheet:"assets/joaquincillo-idle.png",  cols:6, rows:6, frames:36, fps:7, cTop:8, cBot:531 },
+  idle2: { sheet:"assets/joaquincillo-idle2.png", cols:6, rows:6, frames:36, fps:7, cTop:1, cBot:524 },
+  idle3: { sheet:"assets/joaquincillo-idle3.png", cols:6, rows:6, frames:36, fps:7, cTop:6, cBot:529 },
+  idle4: { sheet:"assets/joaquincillo-idle4.png", cols:6, rows:6, frames:36, fps:7, cTop:8, cBot:531 },
+  talk:  { sheet:"assets/joaquincillo-talk-v2.png", cols:8, rows:4, frames:32, fps:14, cTop:1, cBot:598, escala:0.99 },
+  celebrar: { sheet:"assets/joaquincillo-celebrar.png", cols:8, rows:8, frames:64, fps:14, cTop:11, cBot:532 },
+  tumbarse:  { sheet:"assets/joaquincillo-dormir-ciclo.png", cols:8, rows:8, frames:64, desde:0, hasta:40, fps:18, loop:false, modo:"tumbado", escala:0.747, piso:544 },
+  dormir:    { sheet:"assets/joaquincillo-dormir-idle.png",  cols:8, rows:8, frames:64, fps:6,  loop:true,  modo:"tumbado", escala:0.67, piso:381 },
+  levantarse:{ sheet:"assets/joaquincillo-levantarse.png",   cols:8, rows:8, frames:64, fps:18, loop:false, modo:"tumbado", escala:0.80, piso:475 },
+};
+const IDLE_KEYS = ["idle","idle2","idle3","idle4"];
+const ALTURA_PERSONAJE = 360;
+const ANCHO_NORMAL = 280, ANCHO_DORMIR = 380;
+
+const canvas = document.getElementById("lienzo");
+const ctx = canvas.getContext("2d"); ctx.imageSmoothingEnabled = false;
+const boc = document.getElementById("bocadillo");
+const bocT = document.getElementById("bocadillo-texto");
+
+const cache = {};
+let anim = ANIMS.idle, idleActual = "idle";
+let frame=0, acc=0, last=0, speed=1, paused=false, bocTimer=null, idleTimer=null;
+let desde=0, hasta=ANIMS.idle.frames-1, onEnd=null;
+
+function cargar(key){
+  const a = ANIMS[key];
+  if(!cache[a.sheet]){ const im=new Image(); im.src=a.sheet; cache[a.sheet]=im; }
+  return cache[a.sheet];
+}
+function play(key, end){
+  anim = ANIMS[key] || ANIMS.idle;
+  desde = anim.desde ?? 0; hasta = anim.hasta ?? (anim.frames-1);
+  frame=desde; acc=0; onEnd = end||null; cargar(key);
+}
+function setAncho(w){ canvas.width=w; ctx.imageSmoothingEnabled=false; }
+
+function otroIdle(){
+  let k; do { k = IDLE_KEYS[Math.floor(Math.random()*IDLE_KEYS.length)]; } while(k===idleActual);
+  return k;
+}
+function programarCambioIdle(){
+  clearTimeout(idleTimer);
+  idleTimer = setTimeout(()=>{
+    if(anim===ANIMS[idleActual]){ idleActual=otroIdle(); play(idleActual); }
+    programarCambioIdle();
+  }, 8000 + Math.random()*8000);
+}
+
+function mostrar(txt, ms=4000, aviso=false){
+  clearTimeout(bocTimer); bocT.textContent=txt;
+  boc.classList.toggle("aviso",aviso); boc.classList.remove("oculto");
+  if(ms>0) bocTimer=setTimeout(()=>boc.classList.add("oculto"), ms);
+}
+function volverIdle(){ idleActual=otroIdle(); play(idleActual); }
+
+// Precargar todas las hojas y arrancar.
+Object.keys(ANIMS).forEach(cargar);
+play("idle"); programarCambioIdle();
+last=performance.now(); requestAnimationFrame(loop);
+
+function loop(t){
+  if(!paused){
+    const dt=(t-last)/1000; last=t;
+    const dur=1/(anim.fps*speed); acc+=dt;
+    let chg=false;
+    while(acc>=dur){
+      acc-=dur; frame++;
+      if(frame>hasta){
+        if(anim.loop===false){ frame=hasta; if(onEnd){ const cb=onEnd; onEnd=null; cb(); } }
+        else frame=desde;
+      }
+      chg=true;
+    }
+    if(chg) dibujar();
+  } else last=t;
+  requestAnimationFrame(loop);
+}
+function dibujar(){
+  const img=cache[anim.sheet];
+  if(!img || !img.complete || !img.naturalWidth) return;
+  const fw=img.width/anim.cols, fh=img.height/anim.rows;
+  const sx=(frame%anim.cols)*fw, sy=Math.floor(frame/anim.cols)*fh;
+  const cw=canvas.width, ch=canvas.height; ctx.clearRect(0,0,cw,ch);
+  let esc, dy;
+  if(anim.modo==="tumbado"){ esc=anim.escala??1; dy=ch-(anim.piso??fh)*esc; }
+  else { const cBot=anim.cBot??fh; esc=(ALTURA_PERSONAJE/(cBot-(anim.cTop??0)))*(anim.escala??1); dy=ch-cBot*esc; }
+  const dw=fw*esc, dh=fh*esc;
+  ctx.drawImage(img,sx,sy,fw,fh,(cw-dw)/2, dy, dw, dh);
+}
+
+function hablar(txt){ play("talk"); mostrar(txt,3500); setTimeout(volverIdle,3500); }
+function dormir(){
+  setAncho(ANCHO_DORMIR); mostrar(rnd(["Me echo una siestecita... 😴","Zzz..."]),3500);
+  play("tumbarse", ()=>play("dormir"));
+}
+function despertar(despues){
+  play("levantarse", ()=>{ setAncho(ANCHO_NORMAL); if(despues) despues(); else volverIdle(); });
+}
+// Si está dormido, primero se levanta y LUEGO hace la acción (sin cortes bruscos).
+function hacer(fn){ if(anim.modo==="tumbado") despertar(fn); else fn(); }
+
+canvas.addEventListener("click",()=>{
+  if(anim.modo==="tumbado") despertar(()=>hablar(rnd(FRASES.click)));
+  else hablar(rnd(FRASES.click));
+});
+document.querySelector(".controles").addEventListener("click",e=>{
+  const a=e.target.dataset.acc; if(!a) return;
+  if(a==="click") hacer(()=>hablar(rnd(FRASES.click)));
+  if(a==="fire-on"){ hacer(()=>{ speed=1.6; mostrar(rnd(FRASES.on_fire),3500); }); }
+  if(a==="fire-off"){ speed=1; }
+  if(a==="reunion"){ hacer(()=>{ play("talk"); mostrar('📅 "Daily del equipo" en 5 min',6000,true); setTimeout(volverIdle,6000); }); }
+  if(a==="jira"){ hacer(()=>{ play("talk"); mostrar(rnd(['🔄 ABC-123 → In Progress — Login con SSO','💬 Te han mencionado en ABC-98 — Revisar API','💬 Nuevo comentario en ABC-77 — Bug en el login']),6000); setTimeout(volverIdle,6000); }); }
+  if(a==="celebrar"){ hacer(()=>{ play("celebrar"); mostrar('¡Buen trabajo hoy! 🎉',5000); setTimeout(volverIdle,5000); }); }
+  if(a==="dormir"){ if(anim.modo!=="tumbado") dormir(); }
+  if(a==="despertar"){ if(anim.modo==="tumbado") despertar(); }
+  if(a==="pausa") paused=!paused;
+});
+</script>
+</body>
+</html>
