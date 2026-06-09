@@ -15,7 +15,7 @@ use serde::Serialize;
 use std::collections::HashSet;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 
 /// Evita lanzar dos hilos de sondeo (p. ej. si se guardan los Ajustes con el
 /// monitor ya en marcha). Se pone a `true` cuando un hilo arranca de verdad.
@@ -27,6 +27,21 @@ pub struct AvisoJira {
     pub texto: String,
 }
 
+/// Apunta el estado de Jira en %APPDATA%\com.equipo.joaquincillo\jira.log.
+/// Sirve para diagnosticar sin consola y sin depender del bocadillo: ahí se ve
+/// si el monitor arranca, si autentica y si cada sondeo va OK o da error HTTP.
+fn log_jira(app: &AppHandle, linea: &str) {
+    if let Ok(dir) = app.path().app_config_dir() {
+        let _ = std::fs::create_dir_all(&dir);
+        let ruta = dir.join("jira.log");
+        let ts = chrono::Local::now().format("%Y-%m-%d %H:%M:%S");
+        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&ruta) {
+            use std::io::Write;
+            let _ = writeln!(f, "[{ts}] {linea}");
+        }
+    }
+}
+
 pub fn iniciar_monitor(app: AppHandle, cfg: Settings) {
     if !cfg.jira_configurado() {
         // En vez de callarnos (lo que parece "no funciona"), decimos qué falta.
@@ -34,6 +49,7 @@ pub fn iniciar_monitor(app: AppHandle, cfg: Settings) {
         if cfg.jira_site.trim().is_empty() { faltan.push("sitio"); }
         if cfg.jira_email.trim().is_empty() { faltan.push("email"); }
         if cfg.jira_token.trim().is_empty() { faltan.push("token"); }
+        log_jira(&app, &format!("SIN CONFIGURAR: falta {}", faltan.join(", ")));
         let _ = app.emit("mascota://jira", AvisoJira {
             texto: format!(
                 "⚙️ Jira sin configurar: falta {}. Clic derecho en mi icono → Ajustes.",
@@ -61,10 +77,15 @@ pub fn iniciar_monitor(app: AppHandle, cfg: Settings) {
             // Ventana de búsqueda (minutos): el intervalo + 1 de margen.
             let mins = (intervalo / 60).max(1) + 1;
 
+            log_jira(&app, &format!(
+                "ARRANCA monitor — site={} email={} proyecto='{}' intervalo={}s",
+                cfg.jira_site, cfg.jira_email, cfg.jira_proyecto, intervalo
+            ));
+
             // Mi accountId (para detectar menciones y excluir mis propios comentarios).
             let mi_id = match mi_account_id(&cliente, &cfg, &base).await {
-                Ok(id) => id,
-                Err(e) => { eprintln!("[jira] no se pudo identificar al usuario: {e}"); String::new() }
+                Ok(id) => { log_jira(&app, &format!("myself OK (accountId {} chars)", id.len())); id }
+                Err(e) => { eprintln!("[jira] no se pudo identificar al usuario: {e}"); log_jira(&app, &format!("myself ERROR: {e}")); String::new() }
             };
 
             // Para no repetir el mismo aviso (clave: ISSUE@updated).
@@ -80,6 +101,7 @@ pub fn iniciar_monitor(app: AppHandle, cfg: Settings) {
                         // Confirmación positiva la primera vez que conecta bien.
                         if !conexion_avisada {
                             conexion_avisada = true;
+                            log_jira(&app, &format!("CONECTADO OK — {} incidencias en la ventana", issues.len()));
                             let _ = app.emit("mascota://jira", AvisoJira {
                                 texto: "✅ Jira conectado — vigilo tus incidencias".into(),
                             });
@@ -104,6 +126,7 @@ pub fn iniciar_monitor(app: AppHandle, cfg: Settings) {
                     }
                     Err(e) => {
                         eprintln!("[jira] error sondeando: {e}");
+                        log_jira(&app, &format!("ERROR sondeando: {e}"));
                         // Mostrar el error una sola vez (hasta que vuelva a funcionar)
                         // para poder diagnosticar sin tener consola.
                         if !error_avisado {
