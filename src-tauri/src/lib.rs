@@ -38,10 +38,39 @@ const ALTO_VENTANA: u32 = 440;
 // ¿Está durmiendo? Lo usa el hilo de hover para ampliar la zona clicable.
 static DORMIDO: AtomicBool = AtomicBool::new(false);
 
-/// Coloca la ventana de la mascota anclada en la esquina inferior izquierda
-/// del monitor donde se encuentra, respetando un margen.
+/// Ancla la ventana abajo a la izquierda, con los pies del sprite justo sobre el
+/// borde SUPERIOR de la barra de tareas (la barra es "su suelo"). Para eso usa el
+/// área de trabajo de Windows (pantalla menos la barra). Así no se solapa con la
+/// barra y no hay pelea de z-order (que causaba el parpadeo).
 fn anclar_abajo_izquierda(win: &tauri::WebviewWindow) {
-    if let (Ok(Some(monitor)), Ok(size)) = (win.current_monitor(), win.outer_size()) {
+    let Ok(size) = win.outer_size() else { return };
+
+    #[cfg(windows)]
+    {
+        use windows::Win32::Foundation::RECT;
+        use windows::Win32::UI::WindowsAndMessaging::{
+            SystemParametersInfoW, SPI_GETWORKAREA, SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS,
+        };
+        let mut wa = RECT::default();
+        let ok = unsafe {
+            SystemParametersInfoW(
+                SPI_GETWORKAREA,
+                0,
+                Some(&mut wa as *mut RECT as *mut core::ffi::c_void),
+                SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS(0),
+            )
+        }
+        .is_ok();
+        if ok && wa.bottom > wa.top {
+            let x = wa.left + MARGEN_X;
+            let y = wa.bottom - size.height as i32; // pies sobre el borde de la barra
+            let _ = win.set_position(tauri::PhysicalPosition::new(x, y.max(0)));
+            return;
+        }
+    }
+
+    // Fallback (no-Windows o si falla): usar el alto del monitor completo.
+    if let Ok(Some(monitor)) = win.current_monitor() {
         let scr = monitor.size();
         let x = MARGEN_X;
         let y = (scr.height as i32) - (size.height as i32) - MARGEN_Y;
@@ -161,7 +190,6 @@ fn iniciar_hover_clickthrough(win: tauri::WebviewWindow) {
         use windows::Win32::UI::WindowsAndMessaging::GetCursorPos;
 
         let mut ignorando = false;
-        let mut tick: u32 = 0;
         // Empezamos dejando pasar los clicks.
         let _ = win.set_ignore_cursor_events(true);
 
@@ -169,13 +197,6 @@ fn iniciar_hover_clickthrough(win: tauri::WebviewWindow) {
             std::thread::sleep(std::time::Duration::from_millis(120));
             if !win.is_visible().unwrap_or(false) {
                 continue;
-            }
-
-            // Re-afirmar "siempre encima" cada ~2,4 s para quedar por encima de la
-            // barra de tareas (que también es una ventana topmost y si no, nos tapa).
-            tick = tick.wrapping_add(1);
-            if tick % 20 == 0 {
-                let _ = win.set_always_on_top(true);
             }
             let mut p = POINT::default();
             if unsafe { GetCursorPos(&mut p) }.is_err() {

@@ -50,11 +50,19 @@ pub fn iniciar_monitor(app: AppHandle, cfg: Settings) {
             let mut vistos: HashSet<String> = HashSet::new();
             let mut primera_vuelta = true;
             let mut error_avisado = false;
+            let mut conexion_avisada = false;
 
             loop {
                 match sondear(&cliente, &cfg, &base, mins).await {
                     Ok(issues) => {
                         error_avisado = false;
+                        // Confirmación positiva la primera vez que conecta bien.
+                        if !conexion_avisada {
+                            conexion_avisada = true;
+                            let _ = app.emit("mascota://jira", AvisoJira {
+                                texto: "✅ Jira conectado — vigilo tus incidencias".into(),
+                            });
+                        }
                         for ev in &issues {
                             let clave = format!("{}@{}", ev.key, ev.updated);
                             if !vistos.insert(clave) {
@@ -126,7 +134,7 @@ async fn sondear(
     } else {
         format!("(assignee = currentUser() OR watcher = currentUser() OR project = {proyecto})")
     };
-    let jql = format!("{filtro} AND updated >= \"-{mins}m\" ORDER BY updated DESC");
+    let jql = format!("{filtro} AND updated >= -{mins}m ORDER BY updated DESC");
 
     let body = serde_json::json!({
         "jql": jql,
