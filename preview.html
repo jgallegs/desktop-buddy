@@ -67,15 +67,15 @@ const rnd = a => a[Math.floor(Math.random()*a.length)];
 
 // Catálogo (igual que src/sprite.js).
 const ANIMS = {
-  idle:  { sheet:"assets/joaquincillo-idle.png",  cols:6, rows:6, frames:36, fps:7, cTop:8, cBot:531 },
-  idle2: { sheet:"assets/joaquincillo-idle2.png", cols:6, rows:6, frames:36, fps:7, cTop:1, cBot:524 },
-  idle3: { sheet:"assets/joaquincillo-idle3.png", cols:6, rows:6, frames:36, fps:7, cTop:6, cBot:529 },
-  idle4: { sheet:"assets/joaquincillo-idle4.png", cols:6, rows:6, frames:36, fps:7, cTop:8, cBot:531 },
-  talk:  { sheet:"assets/joaquincillo-talk-v2.png", cols:8, rows:4, frames:32, fps:14, cTop:1, cBot:598, escala:0.99 },
-  celebrar: { sheet:"assets/joaquincillo-celebrar.png", cols:8, rows:8, frames:64, fps:14, cTop:11, cBot:532 },
-  tumbarse:  { sheet:"assets/joaquincillo-dormir-ciclo.png", cols:8, rows:8, frames:64, desde:0, hasta:40, fps:18, loop:false, modo:"tumbado", escala:0.747, piso:544 },
-  dormir:    { sheet:"assets/joaquincillo-dormir-idle.png",  cols:8, rows:8, frames:64, fps:6,  loop:true,  modo:"tumbado", escala:0.67, piso:381 },
-  levantarse:{ sheet:"assets/joaquincillo-levantarse.png",   cols:8, rows:8, frames:64, fps:18, loop:false, modo:"tumbado", escala:0.80, piso:475 },
+  idle:  { sheet:"ui/assets/joaquincillo-idle.png",  cols:6, rows:6, frames:36, fps:7, cTop:8, cBot:531 },
+  idle2: { sheet:"ui/assets/joaquincillo-idle2.png", cols:6, rows:6, frames:36, fps:7, cTop:1, cBot:524 },
+  idle3: { sheet:"ui/assets/joaquincillo-idle3.png", cols:6, rows:6, frames:36, fps:7, cTop:6, cBot:529 },
+  idle4: { sheet:"ui/assets/joaquincillo-idle4.png", cols:6, rows:6, frames:36, fps:7, cTop:8, cBot:531 },
+  talk:  { sheet:"ui/assets/joaquincillo-talk-v2.png", cols:8, rows:4, frames:32, fps:14, cTop:1, cBot:598, escala:0.99 },
+  celebrar: { sheet:"ui/assets/joaquincillo-celebrar.png", cols:8, rows:8, frames:64, fps:14, cTop:11, cBot:532 },
+  tumbarse:  { sheet:"ui/assets/joaquincillo-dormir-ciclo.png", cols:8, rows:8, frames:64, desde:0, hasta:40, fps:18, loop:false, modo:"tumbado", escala:0.747, piso:544 },
+  dormir:    { sheet:"ui/assets/joaquincillo-dormir-idle.png",  cols:8, rows:8, frames:64, fps:6,  loop:true,  modo:"tumbado", escala:0.67, piso:381 },
+  levantarse:{ sheet:"ui/assets/joaquincillo-levantarse.png",   cols:8, rows:8, frames:64, fps:18, loop:false, modo:"tumbado", escala:0.80, piso:475 },
 };
 const IDLE_KEYS = ["idle","idle2","idle3","idle4"];
 const ALTURA_PERSONAJE = 360;

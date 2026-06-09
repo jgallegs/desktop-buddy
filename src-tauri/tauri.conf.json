@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "identifier": "com.equipo.joaquincillo",
   "build": {
-    "frontendDist": "../"
+    "frontendDist": "../ui"
   },
   "app": {
     "withGlobalTauri": true,
@@ -39,7 +39,7 @@
       "icons/icon.png"
     ],
     "resources": [
-      "../assets/*"
+      "../ui/assets/*"
     ]
   }
 }

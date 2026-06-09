@@ -50,28 +50,42 @@ Produce un `.msi` (y un `.exe` NSIS) en `src-tauri/target/release/bundle/`.
 
 ---
 
-## Publicar con GitHub Actions (sin compilar en tu PC)
+## Publicar con GitHub Actions + Velopack (sin compilar en tu PC)
 
-Hay un workflow en `.github/workflows/release.yml` que compila Joaquincillo en los
-servidores de GitHub (Windows) y publica el instalador. Así tus compañeros lo descargan
-de la pestaña **Releases** sin que nadie tenga que instalar Rust ni nada.
+El workflow `.github/workflows/release.yml` compila Joaquincillo en los servidores de
+GitHub (Windows) y publica un **instalador de Velopack con auto-actualización** en la
+pestaña **Releases**. Así tus compañeros lo descargan sin instalar Rust ni nada.
 
-**Una vez:** crea un repo en GitHub y sube esta carpeta (con Git, o con GitHub Desktop
-si prefieres no usar la terminal).
+**Una vez:** crea un repo en GitHub y sube esta carpeta (con Git o con GitHub Desktop).
 
 **Para sacar una versión:**
 
-- *Opción etiqueta (crea Release pública):* crea una etiqueta de versión y súbela:
+- *Por etiqueta:* crea y sube una etiqueta de versión:
   ```bash
   git tag v0.1.0
   git push origin v0.1.0
   ```
-  GitHub compila y crea una **Release `v0.1.0`** con el `.msi`/`.exe` adjuntos.
-- *Opción manual (para probar):* en GitHub → pestaña **Actions** → workflow
-  "Compilar y publicar Joaquincillo" → **Run workflow**. Deja el instalador como
-  *artefacto* descargable (sin crear Release).
+  GitHub compila y publica la **Release `v0.1.0`** con el instalador.
+- *Manual:* en GitHub → pestaña **Actions** → "Compilar y publicar Joaquincillo" →
+  **Run workflow**, e introduce la versión (p. ej. `0.1.0`).
 
-Tus compañeros solo entran a **Releases**, descargan el `.msi` y lo ejecutan.
+Tus compañeros entran a **Releases** y ejecutan el instalador (`Joaquincillo-...-Setup.exe`).
+
+## Auto-actualización
+
+Joaquincillo se actualiza solo con **Velopack**: cada pocas horas comprueba si hay una
+versión nueva en las Releases del repo, y si la hay avisa en el bocadillo, la descarga y
+se reinicia ya actualizado. Para que funcione, pon la URL del repo en `config.json`:
+
+```json
+"github_repo": "https://github.com/TU_USUARIO/joaquincillo"
+```
+
+Si lo dejas vacío, no busca actualizaciones. Solo funciona en la app **instalada** (no en
+`npm run dev`). Cada nueva versión que publiques por Actions llega sola a todo el equipo.
+
+> Nota: el instalador de Velopack no incluye WebView2; se asume presente (Win10/11
+> actualizados ya lo traen).
 
 ---
 
@@ -88,18 +102,18 @@ Tus compañeros solo entran a **Releases**, descargan el `.msi` y lo ejecutan.
 
 | Quiero… | Toca… |
 |---------|-------|
-| Cambiar las frases | `src/speech.js` → objeto `FRASES` |
+| Cambiar las frases | `ui/src/speech.js` → objeto `FRASES` |
 | Ajustar cuándo está "on fire" | `config.json` → `on_fire_apm` |
 | Cambiar la antelación del aviso de reunión | `config.json` → `aviso_reunion_min` |
-| Cambiar la hora del "fin de jornada" | `src/states.js` → `HORA_FIN_JORNADA` |
-| Cuánto tarda en dormirse | `src/states.js` → `MS_PARA_DORMIR` |
-| Añadir/mapear animaciones | `src/sprite.js` → `ANIMACIONES`, y disparadores en `src/states.js` |
+| Cambiar la hora del "fin de jornada" | `ui/src/states.js` → `HORA_FIN_JORNADA` |
+| Cuánto tarda en dormirse | `ui/src/states.js` → `MS_PARA_DORMIR` |
+| Añadir/mapear animaciones | `ui/src/sprite.js` → `ANIMACIONES`, y disparadores en `ui/src/states.js` |
 | Mover la posición o el margen | `src-tauri/src/lib.rs` → `MARGEN_X` / `MARGEN_Y` |
 | Tamaño de la ventana | `src-tauri/tauri.conf.json` → `width` / `height` (ajusta también la caja del sprite en `lib.rs`: `SPRITE_X0…Y1`) |
 
 ### Spritesheets
 
-En `assets/` hay 5 hojas, todas definidas en `src/sprite.js` → `ANIMACIONES`:
+En `ui/assets/` hay 9 hojas, todas definidas en `ui/src/sprite.js` → `ANIMACIONES`:
 
 | Animación | Archivo | Rejilla | Uso |
 |-----------|---------|---------|-----|
@@ -213,8 +227,11 @@ Joaquincillo/
 ├── README.md          · este archivo
 ├── preview.html       · demo rápida (doble click)
 ├── package.json
-├── index.html
-├── assets/joaquincillo-idle.png
-├── src/               · frontend (sprite, estados, frases)
-└── src-tauri/         · backend Rust (ventana, actividad, calendario)
+├── config.example.json
+├── ui/                · frontend (lo que se empaqueta en la app)
+│   ├── index.html
+│   ├── src/           · motor de sprites, estados, frases
+│   └── assets/        · spritesheets
+├── src-tauri/         · backend Rust (ventana, actividad, calendario, jira, updater)
+└── .github/workflows/ · CI: compila y publica releases
 ```

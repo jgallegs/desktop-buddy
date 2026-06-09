@@ -1,60 +1,88 @@
 name: Compilar y publicar Joaquincillo
 
-# Cuándo se ejecuta:
-#  - Al subir una etiqueta tipo v0.1.0  -> compila y publica una Release con el .msi.
-#  - Manualmente (botón "Run workflow") -> compila y deja el instalador como artefacto
-#    descargable, sin crear Release (útil para probar).
+# Compila la app y publica el instalador de Velopack (con auto-update) en Releases.
+#  - Al subir una etiqueta tipo v0.1.0  -> usa esa versión.
+#  - Manualmente (Run workflow)         -> pides la versión en un campo.
 on:
   push:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Versión sin la v (p. ej. 0.1.0)"
+        required: true
 
 jobs:
   build:
     runs-on: windows-latest
     permissions:
-      contents: write   # necesario para crear la Release
+      contents: write # necesario para crear la Release
 
     steps:
       - name: Descargar el código
         uses: actions/checkout@v4
 
-      - name: Instalar Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
       - name: Instalar Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Cachear dependencias de Rust (acelera siguientes compilaciones)
+      - name: Cachear dependencias de Rust
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
 
-      - name: Instalar dependencias del proyecto
-        run: npm install
+      - name: Instalar .NET 8 (lo necesita la herramienta vpk de Velopack)
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
 
-      # Compila la app y, SI esto se lanzó por una etiqueta, crea la Release con el .msi.
-      - name: Compilar Joaquincillo (+ Release si hay etiqueta)
-        uses: tauri-apps/tauri-action@v0
+      - name: Instalar la herramienta vpk
+        run: dotnet tool install -g vpk
+
+      - name: Determinar versión y etiqueta
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_REF_TYPE -eq 'tag') {
+            $v = "${{ github.ref_name }}".TrimStart('v')
+            $tag = "${{ github.ref_name }}"
+          } else {
+            $v = "${{ github.event.inputs.version }}"
+            $tag = "v$v"
+          }
+          "VERSION=$v"     | Out-File -FilePath $env:GITHUB_ENV -Append
+          "RELEASE_TAG=$tag" | Out-File -FilePath $env:GITHUB_ENV -Append
+          Write-Host "Versión: $v  Etiqueta: $tag"
+
+      - name: Compilar Joaquincillo (release)
+        run: cargo build --release --manifest-path src-tauri/Cargo.toml
+
+      - name: Preparar carpeta con el ejecutable
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path publish | Out-Null
+          Copy-Item "src-tauri/target/release/joaquincillo.exe" "publish/joaquincillo.exe"
+
+      - name: Empaquetar con Velopack
+        shell: pwsh
+        run: |
+          vpk pack `
+            --packId Joaquincillo `
+            --packVersion $env:VERSION `
+            --packDir publish `
+            --mainExe joaquincillo.exe `
+            --packTitle "Joaquincillo" `
+            --icon src-tauri/icons/icon.ico `
+            --outputDir releases
+
+      - name: Publicar la Release en GitHub
+        shell: pwsh
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tagName: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
-          releaseName: "Joaquincillo ${{ github.ref_name }}"
-          releaseBody: "Instalador de Joaquincillo. Descarga el archivo .msi de abajo y ejecútalo."
-          releaseDraft: false
-          prerelease: false
-
-      # En ejecuciones manuales (sin etiqueta) deja el instalador como artefacto descargable.
-      - name: Subir instalador como artefacto (ejecución manual)
-        if: github.ref_type != 'tag'
-        uses: actions/upload-artifact@v4
-        with:
-          name: joaquincillo-instalador
-          path: |
-            src-tauri/target/release/bundle/msi/*.msi
-            src-tauri/target/release/bundle/nsis/*.exe
-          if-no-files-found: ignore
+        run: |
+          vpk upload github `
+            --outputDir releases `
+            --repoUrl "${{ github.server_url }}/${{ github.repository }}" `
+            --publish `
+            --releaseName "Joaquincillo $env:VERSION" `
+            --tag $env:RELEASE_TAG `
+            --token $env:GITHUB_TOKEN

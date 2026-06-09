@@ -7,5 +7,6 @@
   "jira_email": "tu.email@nttdata.com",
   "jira_token": "",
   "jira_proyecto": "",
-  "jira_intervalo_s": 60
+  "jira_intervalo_s": 60,
+  "github_repo": "https://github.com/TU_USUARIO/joaquincillo"
 }

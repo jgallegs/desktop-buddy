@@ -59,7 +59,6 @@ export class MaquinaEstados {
   /** Click del usuario sobre el sprite. */
   click() {
     this.ultimaInteraccion = Date.now();
-    // Si está dormido, primero se levanta y luego habla (nada de cortes bruscos).
     if (this._durmiendo()) return this._despertar(() => this._hablarClick());
     this._hablarClick();
   }
@@ -83,7 +82,6 @@ export class MaquinaEstados {
     this.onFireActivo = activo;
     if (activo) {
       this.ultimaInteraccion = Date.now();
-      // Dormido: se levanta primero; al estar de pie quedará en on_fire por onFireActivo.
       if (this._durmiendo()) { this._despertar(); return; }
       this._transicion("on_fire", () => {
         this.sprite.setSpeed(1.6);
@@ -96,7 +94,6 @@ export class MaquinaEstados {
 
   /** Reunión próxima (payload de calendar.rs: { titulo, minutos }). */
   reunion(datos) {
-    // Dormido: se levanta primero y, al terminar, avisa de la reunión.
     if (this._durmiendo()) return this._despertar(() => this._mostrarReunion(datos));
     this._mostrarReunion(datos);
   }
@@ -147,7 +144,6 @@ export class MaquinaEstados {
       }
     }
 
-    // Dormir tras un rato sin actividad.
     const inactivoMs = Date.now() - this.ultimaInteraccion;
     if (inactivoMs > MS_PARA_DORMIR && this.estado === "idle") {
       this._dormir();
@@ -172,20 +168,16 @@ export class MaquinaEstados {
     this.sprite.setSpeed(1);
     this.onDormir(true); // ensanchar la ventana (la cama es ancha)
     this.bocadillo.mostrar(fraseAleatoria("dormir"), 4000);
-    // tumbarse (una vez) -> idle durmiendo en bucle.
     this.sprite.play("tumbarse", { onComplete: () => {
       if (this.estado === "dormir") this.sprite.play("dormir");
     }});
   }
 
   /**
-   * Despierta a Joaquincillo: reproduce "levantarse" entero y, SOLO al terminar,
-   * estrecha la ventana y ejecuta la acción pendiente (hablar, avisar...). Así nunca
-   * se corta la animación de levantarse a la mitad.
-   * @param despues  callback opcional a ejecutar cuando ya está de pie.
+   * Despierta: reproduce "levantarse" entero y SOLO al terminar estrecha la ventana
+   * y ejecuta la acción pendiente (hablar, avisar...). Nunca se corta a la mitad.
    */
   _despertar(despues = null) {
-    // Si ya se está levantando, solo actualizamos la acción pendiente (no reiniciamos).
     if (this.estado === "despertando") {
       if (despues) this._pendiente = despues;
       return;
@@ -198,7 +190,7 @@ export class MaquinaEstados {
       this.estado = "idle";
       const accion = this._pendiente;
       this._pendiente = null;
-      if (accion) accion(); // hablar / avisar, ya de pie
+      if (accion) accion();
       else this._volverAFondo();
     }});
   }

@@ -13,6 +13,7 @@ mod activity;
 mod calendar;
 mod jira;
 mod settings;
+mod updater;
 
 use tauri::{
     menu::{Menu, MenuItem},
@@ -95,6 +96,9 @@ pub fn run() {
 
             // Sondeo de Jira Cloud -> evento "mascota://jira".
             jira::iniciar_monitor(app.handle().clone(), cfg.clone());
+
+            // Auto-actualización con Velopack (si hay github_repo configurado).
+            updater::iniciar_monitor(app.handle().clone(), cfg.clone());
 
             // Click-through inteligente: la ventana deja pasar los clicks a lo que hay
             // debajo, SALVO cuando el cursor está sobre el sprite (para poder pulsarlo).

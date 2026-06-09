@@ -42,6 +42,11 @@ pub struct Settings {
     /// Cada cuántos segundos sondear Jira (mínimo práctico ~30).
     #[serde(default = "jira_intervalo_por_defecto")]
     pub jira_intervalo_s: u64,
+
+    /// Repo de GitHub para auto-actualización con Velopack, p. ej.
+    /// "https://github.com/usuario/joaquincillo". Vacío = sin auto-update.
+    #[serde(default)]
+    pub github_repo: String,
 }
 
 fn tenant_por_defecto() -> String { "common".into() }
@@ -61,6 +66,7 @@ impl Default for Settings {
             jira_token: String::new(),
             jira_proyecto: String::new(),
             jira_intervalo_s: jira_intervalo_por_defecto(),
+            github_repo: String::new(),
         }
     }
 }

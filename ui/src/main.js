@@ -38,7 +38,7 @@ async function arrancar() {
   // Saludo inicial según la hora.
   setTimeout(() => estados.saludar(), 800);
 
-  // Click sobre el sprite -> habla.
+  // Click sobre el sprite -> habla (o despierta si duerme).
   canvas.addEventListener("click", () => estados.click());
 
   // --- Eventos del backend ---
@@ -46,21 +46,16 @@ async function arrancar() {
   await listen("mascota://actividad", () => estados.actividad());
   await listen("mascota://reunion", (e) => estados.reunion(e.payload));
   await listen("mascota://jira", (e) => estados.jira(e.payload?.texto || ""));
-  await listen("mascota://toggle-pausa", () =>
-    sprite.setPausa(!sprite.paused)
-  );
-
-  // Login de Microsoft (device-code): Joaquincillo enseña el código en su bocadillo.
+  await listen("mascota://update", () => estados.jira("✨ ¡Nueva versión! Me actualizo y vuelvo 🔄"));
   await listen("mascota://login", (e) => {
     const { codigo, url } = e.payload || {};
     sprite.play("talk");
     bocadillo.mostrar(`Para ver tu calendario, entra en ${url} y pon el código: ${codigo}`, 0);
   });
-  await listen("mascota://login-ok", () => {
-    bocadillo.mostrar("¡Conectado a tu calendario! 📅", 4000);
-  });
+  await listen("mascota://login-ok", () => bocadillo.mostrar("¡Conectado a tu calendario! 📅", 4000));
+  await listen("mascota://toggle-pausa", () => sprite.setPausa(!sprite.paused));
 
-  // Tick ambiental cada segundo (frases de "¿sigues ahí?", etc.).
+  // Tick ambiental cada segundo (dormir, fin de jornada...).
   setInterval(() => estados.tick(), 1000);
 }
 
