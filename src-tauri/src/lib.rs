@@ -12,6 +12,7 @@
 mod activity;
 mod calendar;
 mod jira;
+mod secrets;
 mod settings;
 mod updater;
 
@@ -59,19 +60,23 @@ pub fn run() {
 
             // Cargar ajustes (config.json en la carpeta de datos de la app).
             let config_dir = app.path().app_config_dir().unwrap_or_else(|_| ".".into());
-            let cfg = settings::cargar(&config_dir);
+            let mut cfg = settings::cargar(&config_dir);
+            // Mover tokens en texto plano al llavero cifrado de Windows (y borrarlos del archivo).
+            settings::migrar_secretos(&config_dir, &mut cfg);
 
             // --- Icono de bandeja con menú ---
+            let actualizar = MenuItem::with_id(app, "actualizar", "Buscar actualizaciones", true, None::<&str>)?;
             let pausar = MenuItem::with_id(app, "pausar", "Pausar / reanudar", true, None::<&str>)?;
             let esconder = MenuItem::with_id(app, "esconder", "Mostrar / esconder", true, None::<&str>)?;
             let salir = MenuItem::with_id(app, "salir", "Salir", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&esconder, &pausar, &salir])?;
+            let menu = Menu::with_items(app, &[&esconder, &actualizar, &pausar, &salir])?;
 
+            let cfg_tray = cfg.clone(); // para el botón "Buscar actualizaciones"
             TrayIconBuilder::new()
                 .icon(app.default_window_icon().unwrap().clone())
                 .menu(&menu)
                 .tooltip("Joaquincillo")
-                .on_menu_event(|app, event| match event.id.as_ref() {
+                .on_menu_event(move |app, event| match event.id.as_ref() {
                     "salir" => app.exit(0),
                     "esconder" => {
                         if let Some(w) = app.get_webview_window("mascota") {
@@ -83,6 +88,10 @@ pub fn run() {
                         // Avisa al frontend para que pause/reanude las animaciones.
                         let _ = app.emit("mascota://toggle-pausa", ());
                     }
+                    "actualizar" => {
+                        // Comprobación bajo demanda: si hay update, descarga y reinicia.
+                        updater::comprobar_ahora(app.clone(), cfg_tray.clone());
+                    }
                     _ => {}
                 })
                 .build(app)?;
@@ -92,7 +101,7 @@ pub fn run() {
             activity::iniciar_monitor(app.handle().clone(), cfg.on_fire_apm);
 
             // Sondeo del calendario (Microsoft Graph) -> evento "mascota://reunion".
-            calendar::iniciar_monitor(app.handle().clone(), cfg.clone(), config_dir.clone());
+            calendar::iniciar_monitor(app.handle().clone(), cfg.clone());
 
             // Sondeo de Jira Cloud -> evento "mascota://jira".
             jira::iniciar_monitor(app.handle().clone(), cfg.clone());

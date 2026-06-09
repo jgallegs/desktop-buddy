@@ -8,11 +8,14 @@
 // Si config.json no tiene azure_client_id, se ejecuta en modo SIMULACIÓN (una reunión
 // de prueba a los 20 s) para poder ver el comportamiento sin montar nada de Azure.
 
-use crate::settings::{self, Settings};
+use crate::secrets;
+use crate::settings::Settings;
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter};
+
+// Clave del token de Microsoft en el llavero (Administrador de credenciales).
+const CLAVE_TOKEN: &str = "ms_token";
 
 const INTERVALO_SONDEO_S: u64 = 60;
 const GRAPH_SCOPE: &str = "offline_access Calendars.Read User.Read";
@@ -31,7 +34,7 @@ pub struct Login {
     pub url: String,
 }
 
-/// Token guardado en disco (ms_token.json).
+/// Token guardado en el llavero cifrado (no en disco en texto plano).
 #[derive(Clone, Serialize, Deserialize)]
 struct TokenGuardado {
     access_token: String,
@@ -40,7 +43,7 @@ struct TokenGuardado {
     expira_en: i64,
 }
 
-pub fn iniciar_monitor(app: AppHandle, cfg: Settings, config_dir: PathBuf) {
+pub fn iniciar_monitor(app: AppHandle, cfg: Settings) {
     std::thread::spawn(move || {
         let rt = tokio::runtime::Builder::new_current_thread()
             .enable_all()
@@ -59,11 +62,10 @@ pub fn iniciar_monitor(app: AppHandle, cfg: Settings, config_dir: PathBuf) {
             }
 
             let cliente = reqwest::Client::new();
-            let token_path = settings::ruta_token(&config_dir);
 
             loop {
                 // 1) Asegurar que tenemos un token válido (login o refresh).
-                let token = match asegurar_token(&app, &cliente, &cfg, &token_path).await {
+                let token = match asegurar_token(&app, &cliente, &cfg).await {
                     Ok(t) => t,
                     Err(e) => {
                         eprintln!("[calendar] no se pudo autenticar: {e}");
@@ -93,19 +95,18 @@ async fn asegurar_token(
     app: &AppHandle,
     cliente: &reqwest::Client,
     cfg: &Settings,
-    token_path: &PathBuf,
 ) -> Result<String, Box<dyn std::error::Error>> {
     let ahora = chrono::Utc::now().timestamp();
 
-    // ¿Hay token guardado?
-    if let Ok(txt) = std::fs::read_to_string(token_path) {
+    // ¿Hay token guardado en el llavero?
+    if let Some(txt) = secrets::obtener(CLAVE_TOKEN) {
         if let Ok(tk) = serde_json::from_str::<TokenGuardado>(&txt) {
             if tk.expira_en - ahora > 120 {
                 return Ok(tk.access_token); // todavía válido
             }
             // Caduca pronto: intentar refrescar.
             if let Ok(nuevo) = refrescar(cliente, cfg, &tk.refresh_token).await {
-                guardar(token_path, &nuevo);
+                guardar(&nuevo);
                 return Ok(nuevo.access_token);
             }
         }
@@ -113,13 +114,13 @@ async fn asegurar_token(
 
     // No hay token (o el refresh falló): flujo device-code.
     let nuevo = device_code(app, cliente, cfg).await?;
-    guardar(token_path, &nuevo);
+    guardar(&nuevo);
     Ok(nuevo.access_token)
 }
 
-fn guardar(token_path: &PathBuf, tk: &TokenGuardado) {
+fn guardar(tk: &TokenGuardado) {
     if let Ok(txt) = serde_json::to_string(tk) {
-        let _ = std::fs::write(token_path, txt);
+        let _ = secrets::guardar(CLAVE_TOKEN, &txt);
     }
 }
 

@@ -26,6 +26,9 @@ chrono = { version = "0.4", features = ["serde"] }
 # Auto-actualización e instalador (Velopack).
 velopack = "1.2"
 
+# Almacén seguro de credenciales (Administrador de credenciales de Windows / DPAPI).
+keyring = { version = "3", features = ["windows-native"] }
+
 [target.'cfg(windows)'.dependencies]
 # API de Windows para el hook de teclado (detección de actividad) y posicionado.
 windows = { version = "0.58", features = [

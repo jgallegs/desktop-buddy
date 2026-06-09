@@ -47,6 +47,8 @@ async function arrancar() {
   await listen("mascota://reunion", (e) => estados.reunion(e.payload));
   await listen("mascota://jira", (e) => estados.jira(e.payload?.texto || ""));
   await listen("mascota://update", () => estados.jira("✨ ¡Nueva versión! Me actualizo y vuelvo 🔄"));
+  await listen("mascota://update-disponible", () => estados.jira("✨ Hay una versión nueva. Clic derecho en mi icono de la bandeja → Buscar actualizaciones."));
+  await listen("mascota://aviso", (e) => estados.jira(e.payload?.texto || ""));
   await listen("mascota://login", (e) => {
     const { codigo, url } = e.payload || {};
     sprite.play("talk");

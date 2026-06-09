@@ -73,12 +73,20 @@ Tus compañeros entran a **Releases** y ejecutan el instalador (`Joaquincillo-..
 
 ## Auto-actualización
 
-Joaquincillo se actualiza solo con **Velopack**: cada pocas horas comprueba si hay una
-versión nueva en las Releases del repo, y si la hay avisa en el bocadillo, la descarga y
-se reinicia ya actualizado. Para que funcione, pon la URL del repo en `config.json`:
+Joaquincillo se actualiza con **Velopack**:
+
+- **Automático (cada 6 h):** si hay versión nueva, solo **avisa** en el bocadillo. No
+  reinicia, para no interrumpirte mientras trabajas.
+- **Cuando tú quieras:** clic derecho en su icono de la **bandeja** (junto al reloj) →
+  **"Buscar actualizaciones"**. Ahí sí descarga, instala y reinicia. Si ya estás al día,
+  te lo dice. Así la mascota se queda limpia, sin botones encima.
+
+La URL del repo ya viene puesta por defecto en el código (`jgallegs/desktop-buddy`), así
+que toda instalación se actualiza sin configurar nada. Se puede sobreescribir en
+`config.json`:
 
 ```json
-"github_repo": "https://github.com/TU_USUARIO/joaquincillo"
+"github_repo": "https://github.com/jgallegs/desktop-buddy"
 ```
 
 Si lo dejas vacío, no busca actualizaciones. Solo funciona en la app **instalada** (no en
@@ -160,9 +168,19 @@ Al arrancar por primera vez, la app crea **`config.json`** en
   "azure_client_id": "",        // ID de la app de Azure (vacío = calendario simulado)
   "azure_tenant": "common",     // o el ID del tenant corporativo
   "on_fire_apm": 280,           // pulsaciones/min para activar "on fire"
-  "aviso_reunion_min": 5        // antelación del aviso de reunión
+  "aviso_reunion_min": 5,       // antelación del aviso de reunión
+  "jira_site": "cexpress.atlassian.net",
+  "jira_email": "tu.email@nttdata.com",
+  "jira_token": "",             // se mueve al llavero cifrado al arrancar (ver Privacidad)
+  "jira_proyecto": "",          // opcional: clave de proyecto a seguir
+  "jira_intervalo_s": 60,
+  "github_repo": "https://github.com/jgallegs/desktop-buddy"
 }
 ```
+
+> **Tokens:** aunque pongas `jira_token` aquí, al arrancar Joaquincillo lo mueve al
+> Administrador de credenciales de Windows (cifrado) y lo **borra del archivo**. El token
+> de Microsoft tampoco se guarda en disco en claro. Ver [Privacidad](#privacidad).
 
 ## Activar el calendario real (Microsoft Graph)
 
@@ -203,7 +221,6 @@ novedades). Para activarlo:
 > **Sobre el "tiempo real":** una app de escritorio no puede recibir *push* de Jira sin
 > un servidor con URL pública (webhooks). Esto **sondea** cada `jira_intervalo_s`
 > segundos, que se siente casi en directo sin que Jira te limite por exceso de llamadas.
-> El token va en claro en `config.json`; para repartir conviene cifrarlo (ver `PLAN.md`).
 
 ---
 
@@ -213,9 +230,12 @@ La detección de "on fire" usa un hook de teclado que **solo cuenta** pulsacione
 agregada en memoria. No registra qué teclas se pulsan, no guarda nada en disco y no envía
 nada a ningún servidor. Conviene explicarlo así al equipo. Detalle en `PLAN.md` §7.
 
-El token de Microsoft se guarda en `%APPDATA%\com.equipo.joaquincillo\ms_token.json`.
-Para una versión de reparto conviene cifrarlo con el almacén de credenciales de Windows
-(pendiente, ver `PLAN.md` §8).
+**Tokens cifrados:** los tokens de Jira y de Microsoft se guardan en el **Administrador
+de credenciales de Windows** (vía DPAPI), cifrados y atados a tu cuenta de Windows —
+nunca en texto plano en disco. Si pones el token de Jira en `config.json`, al primer
+arranque se mueve al llavero y se borra del archivo automáticamente. "Seguro" aquí
+significa cifrado a nivel de tu sesión de Windows, el estándar de las apps de escritorio
+(igual que Outlook o Teams).
 
 ---
 

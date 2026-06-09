@@ -5,7 +5,7 @@
 // el usuario solo tenga que abrirlo y rellenar el client_id de Azure.
 
 use serde::{Deserialize, Serialize};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Settings {
@@ -43,9 +43,9 @@ pub struct Settings {
     #[serde(default = "jira_intervalo_por_defecto")]
     pub jira_intervalo_s: u64,
 
-    /// Repo de GitHub para auto-actualización con Velopack, p. ej.
-    /// "https://github.com/usuario/joaquincillo". Vacío = sin auto-update.
-    #[serde(default)]
+    /// Repo de GitHub para auto-actualización con Velopack. Por defecto el oficial;
+    /// se puede sobreescribir en config.json. Vacío = sin auto-update.
+    #[serde(default = "repo_por_defecto")]
     pub github_repo: String,
 }
 
@@ -53,6 +53,7 @@ fn tenant_por_defecto() -> String { "common".into() }
 fn apm_por_defecto() -> u64 { 280 }
 fn aviso_por_defecto() -> i64 { 5 }
 fn jira_intervalo_por_defecto() -> u64 { 60 }
+fn repo_por_defecto() -> String { "https://github.com/jgallegs/desktop-buddy".into() }
 
 impl Default for Settings {
     fn default() -> Self {
@@ -66,7 +67,7 @@ impl Default for Settings {
             jira_token: String::new(),
             jira_proyecto: String::new(),
             jira_intervalo_s: jira_intervalo_por_defecto(),
-            github_repo: String::new(),
+            github_repo: repo_por_defecto(),
         }
     }
 }
@@ -105,7 +106,24 @@ pub fn cargar(config_dir: &Path) -> Settings {
     s
 }
 
-/// Ruta donde guardamos el token de Microsoft (cache de sesión).
-pub fn ruta_token(config_dir: &Path) -> PathBuf {
-    config_dir.join("ms_token.json")
+/// Mueve los secretos que pudieran estar en texto plano en config.json al llavero
+/// (Administrador de credenciales de Windows) y los borra del archivo. Después deja
+/// en memoria el valor efectivo leído del llavero, para que el resto del código lo use
+/// igual que antes.
+pub fn migrar_secretos(config_dir: &Path, s: &mut Settings) {
+    let token_en_archivo = s.jira_token.trim().to_string();
+    if !token_en_archivo.is_empty() {
+        // Guardar en el llavero y borrar del archivo (reescribir sin el token).
+        if crate::secrets::guardar("jira_token", &token_en_archivo).is_ok() {
+            let mut disco = s.clone();
+            disco.jira_token = String::new();
+            if let Ok(txt) = serde_json::to_string_pretty(&disco) {
+                let _ = std::fs::write(config_dir.join("config.json"), txt);
+            }
+        }
+    }
+    // Token efectivo desde el llavero (si existe) -> memoria.
+    if let Some(t) = crate::secrets::obtener("jira_token") {
+        s.jira_token = t;
+    }
 }
