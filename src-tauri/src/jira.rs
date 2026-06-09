@@ -13,8 +13,13 @@
 use crate::settings::Settings;
 use serde::Serialize;
 use std::collections::HashSet;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use tauri::{AppHandle, Emitter};
+
+/// Evita lanzar dos hilos de sondeo (p. ej. si se guardan los Ajustes con el
+/// monitor ya en marcha). Se pone a `true` cuando un hilo arranca de verdad.
+static MONITOR_ACTIVO: AtomicBool = AtomicBool::new(false);
 
 /// Aviso de Jira que se envía al frontend.
 #[derive(Clone, Serialize)]
@@ -24,7 +29,23 @@ pub struct AvisoJira {
 
 pub fn iniciar_monitor(app: AppHandle, cfg: Settings) {
     if !cfg.jira_configurado() {
-        return; // sin credenciales, nada que hacer
+        // En vez de callarnos (lo que parece "no funciona"), decimos qué falta.
+        let mut faltan: Vec<&str> = Vec::new();
+        if cfg.jira_site.trim().is_empty() { faltan.push("sitio"); }
+        if cfg.jira_email.trim().is_empty() { faltan.push("email"); }
+        if cfg.jira_token.trim().is_empty() { faltan.push("token"); }
+        let _ = app.emit("mascota://jira", AvisoJira {
+            texto: format!(
+                "⚙️ Jira sin configurar: falta {}. Clic derecho en mi icono → Ajustes.",
+                faltan.join(", ")
+            ),
+        });
+        return;
+    }
+
+    // Si ya hay un hilo sondeando, no arrancamos otro (evita avisos duplicados).
+    if MONITOR_ACTIVO.swap(true, Ordering::SeqCst) {
+        return;
     }
 
     std::thread::spawn(move || {

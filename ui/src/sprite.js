@@ -16,7 +16,7 @@ export const ANIMACIONES = {
   },
 
   idle2: { sheet: "assets/joaquincillo-idle2.png", cols: 6, rows: 6, frames: 36, fps: 7, loop: true, cTop: 1, cBot: 524 },
-  idle3: { sheet: "assets/joaquincillo-idle3.png", cols: 6, rows: 6, frames: 36, fps: 7, loop: true, cTop: 6, cBot: 529 },
+  idle3: { sheet: "assets/joaquincillo-idle3.png", cols: 6, rows: 6, frames: 36, fps: 7, loop: true, cTop: 1, cBot: 524 },
   idle4: { sheet: "assets/joaquincillo-idle4.png", cols: 6, rows: 6, frames: 36, fps: 7, loop: true, cTop: 8, cBot: 531 },
 
   // Hablar: hoja recortada (sin la intro). 8x4 = 32 frames. La usa el estado "talking".
@@ -78,7 +78,17 @@ export class SpriteEngine {
     }
     return new Promise((resolve, reject) => {
       const img = new Image();
-      img.onload = () => { this.cache.set(sheet, img); resolve(img); };
+      img.onload = () => {
+        // Una imagen truncada/vacía puede disparar onload pero sin píxeles: tratarla
+        // como fallo para que se use el fallback y nunca quede el sprite en blanco.
+        if (!img.naturalWidth || !img.naturalHeight) {
+          this.cache.set(sheet, null);
+          reject(new Error("imagen vacía/truncada " + sheet));
+          return;
+        }
+        this.cache.set(sheet, img);
+        resolve(img);
+      };
       img.onerror = () => { this.cache.set(sheet, null); reject(new Error("no se pudo cargar " + sheet)); };
       img.src = sheet;
     });
@@ -178,7 +188,7 @@ export class SpriteEngine {
     const a = this.anim;
     if (!a) return;
     const img = this.cache.get(a.sheet);
-    if (!img) return;
+    if (!img || !img.naturalWidth) return; // imagen no lista/rota: conserva el frame anterior
 
     const fw = img.width / a.cols;
     const fh = img.height / a.rows;

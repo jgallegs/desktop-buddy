@@ -331,6 +331,13 @@ fn guardar_ajustes(app: tauri::AppHandle, datos: AjustesEntrada) -> Result<(), S
 
     settings::escribir(&dir, &s).map_err(|e| e.to_string())?;
 
+    // Relanzar el monitor de Jira con la nueva config, sin reiniciar la app.
+    // El token vive en el llavero, así que lo cargamos en la copia en memoria.
+    if let Some(t) = secrets::obtener("jira_token") {
+        s.jira_token = t;
+    }
+    jira::iniciar_monitor(app.clone(), s.clone());
+
     if let Some(w) = app.get_webview_window("ajustes") {
         let _ = w.close();
     }
